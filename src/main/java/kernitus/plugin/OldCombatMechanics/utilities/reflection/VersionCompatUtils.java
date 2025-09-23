@@ -27,7 +27,7 @@ public class VersionCompatUtils {
      * @param spigotObject The spigot object to get the handle of, e.g. Player
      * @return The Craft object
      */
-    private static Object getCraftHandle(Object spigotObject) {
+    public static Object getCraftHandle(Object spigotObject) {
         return Reflector.invokeMethod(Reflector.getMethod(spigotObject.getClass(), "getHandle"), spigotObject);
     }
 

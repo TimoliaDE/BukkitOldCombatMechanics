@@ -5,8 +5,10 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
+import com.destroystokyo.paper.MaterialTags;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -16,6 +18,8 @@ import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.entity.EntityDamageEvent.DamageModifier;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,7 +29,9 @@ import java.util.stream.Collectors;
  */
 public class ModuleShieldDamageReduction extends OCMModule {
 
-    private int genericDamageReductionAmount, genericDamageReductionPercentage, projectileDamageReductionAmount, projectileDamageReductionPercentage;
+    private int genericDamageReductionAmount, genericDamageReductionPercentage,
+            projectileDamageReductionAmount, projectileDamageReductionPercentage;
+    private boolean swordsOnly;
     private final Map<UUID, List<ItemStack>> fullyBlocked = new WeakHashMap<>();
 
     public ModuleShieldDamageReduction(OCMMain plugin) {
@@ -39,6 +45,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         genericDamageReductionPercentage = module().getInt("generalDamageReductionPercentage", 50);
         projectileDamageReductionAmount = module().getInt("projectileDamageReductionAmount", 1);
         projectileDamageReductionPercentage = module().getInt("projectileDamageReductionPercentage", 50);
+        swordsOnly = module().getBoolean("swordsOnly", true);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -75,6 +82,8 @@ public class ModuleShieldDamageReduction extends OCMModule {
         final double baseDamage = e.getDamage(DamageModifier.BASE) + e.getDamage(DamageModifier.HARD_HAT);
         if (!shieldBlockedDamage(baseDamage, e.getDamage(DamageModifier.BLOCKING))) return;
 
+        if (swordsOnly && !isBlockingWithSwordOrModuleShield(player)) return;
+
         final double damageReduction = getDamageReduction(baseDamage, e.getCause());
         e.setDamage(DamageModifier.BLOCKING, -damageReduction);
         final double currentDamage = baseDamage - damageReduction;
@@ -93,6 +102,17 @@ public class ModuleShieldDamageReduction extends OCMModule {
                 debug("Removed from fully blocked set!", player);
             }, 1L);
         }
+    }
+
+    private boolean isBlockingWithSwordOrModuleShield(Player player) {
+        if (!player.isBlocking()) return false;
+
+        ItemStack iStack = player.getActiveItem();
+        ItemMeta iMeta = iStack.getItemMeta();
+        Material type = iStack.getType();
+
+        return MaterialTags.SWORDS.isTagged(type) || iMeta != null &&
+                iMeta.getPersistentDataContainer().has(ModuleSwordBlocking.KEY, PersistentDataType.STRING);
     }
 
     private double getDamageReduction(double damage, DamageCause damageCause) {
