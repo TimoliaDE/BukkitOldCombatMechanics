@@ -1,98 +1,157 @@
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- */
 package kernitus.plugin.OldCombatMechanics.module;
 
-import com.cryptomorin.xseries.XAttribute;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import kernitus.plugin.OldCombatMechanics.utilities.MathsHelper;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
+import kernitus.plugin.OldCombatMechanics.versions.ReflectorUtil;
+import net.minecraft.world.food.FoodData;
 import org.bukkit.Bukkit;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityExhaustionEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.tag.DamageTypeTags;
+import org.spigotmc.SpigotWorldConfig;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.WeakHashMap;
+import java.util.HashSet;
+import java.util.Set;
+
+import static org.bukkit.event.entity.EntityDamageEvent.DamageCause.*;
 
 /**
- * Establishes custom health regeneration rules.
- * Default values based on 1.8 from
- * <a href="https://minecraft.gamepedia.com/Hunger?oldid=948685">wiki</a>
+ * This is to make players' regeneration from saturation and
+ * the rate at which you lose hunger points to 1.8.
  */
 public class ModulePlayerRegen extends OCMModule {
 
-    private final Map<UUID, Long> healTimes = new WeakHashMap<>();
+    private static final Set<EntityDamageEvent.DamageCause> bypassesArmorCauses;
+
+    static {
+        bypassesArmorCauses = new HashSet<>();
+        bypassesArmorCauses.addAll(Set.of(CRAMMING, DRAGON_BREATH, DROWNING, DRYOUT, FALL, FLY_INTO_WALL,
+                FREEZE, HOT_FLOOR, LIGHTNING, MAGIC, POISON, SONIC_BOOM, STARVATION, SUFFOCATION, SUICIDE, VOID,
+                WITHER));
+
+        if (Reflector.versionIsNewerOrEqualTo(1, 20, 0)) {
+            bypassesArmorCauses.add(WORLD_BORDER);
+
+            if (Reflector.versionIsNewerOrEqualTo(1, 21, 0))
+                bypassesArmorCauses.add(CAMPFIRE);
+        }
+    }
 
     public ModulePlayerRegen(OCMMain plugin) {
         super(plugin, "old-player-regen");
+        reload();
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onRegen(EntityRegainHealthEvent e) {
-        if (e.getEntityType() != EntityType.PLAYER
-                || e.getRegainReason() != EntityRegainHealthEvent.RegainReason.SATIATED)
-            return;
-
-        final Player p = (Player) e.getEntity();
-        if (!isEnabled(p))
-            return;
-
-        final UUID playerId = p.getUniqueId();
-
-        // We cancel the regen, but saturation and exhaustion need to be adjusted
-        // separately
-        // Exhaustion is modified in the next tick, and saturation in the tick following
-        // that (if exhaustion > 4)
-        e.setCancelled(true);
-
-        // Get exhaustion & saturation values before healing modifies them
-        final float previousExhaustion = p.getExhaustion();
-        final float previousSaturation = p.getSaturation();
-
-        // Check that it has been at least x seconds since last heal
-        final long currentTime = System.currentTimeMillis();
-        final boolean hasLastHealTime = healTimes.containsKey(playerId);
-        final long lastHealTime = healTimes.computeIfAbsent(playerId, id -> currentTime);
-
-        debug("Exh: " + previousExhaustion + " Sat: " + previousSaturation + " Time: " + (currentTime - lastHealTime),
-                p);
-
-        // If we're skipping this heal, we must fix the exhaustion in the following tick
-        if (hasLastHealTime && currentTime - lastHealTime <= module().getLong("interval")) {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> p.setExhaustion(previousExhaustion), 1L);
-            return;
-        }
-
-        final double maxHealth = p.getAttribute(XAttribute.MAX_HEALTH.get()).getValue();
-        final double playerHealth = p.getHealth();
-
-        if (playerHealth < maxHealth) {
-            p.setHealth(MathsHelper.clamp(playerHealth + module().getInt("amount"), 0.0, maxHealth));
-            healTimes.put(playerId, currentTime);
-        }
-
-        // Calculate new exhaustion value, must be between 0 and 4. If above, it will
-        // reduce the saturation in the following tick.
-        final float exhaustionToApply = (float) module().getDouble("exhaustion");
-
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            // We do this in the next tick because bukkit doesn't stop the exhaustion change
-            // when cancelling the event
-            p.setExhaustion(previousExhaustion + exhaustionToApply);
-            debug("Exh before: " + previousExhaustion + " Now: " + p.getExhaustion() +
-                    " Sat now: " + previousSaturation, p);
-        }, 1L);
+    @Override
+    public void reload() {
+        Bukkit.getOnlinePlayers().forEach(this::adjustSaturatedRegenRate);
     }
 
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent e) {
-        healTimes.remove(e.getPlayer().getUniqueId());
+    private void adjustSaturatedRegenRate(Player player) {
+        FoodData foodData = ReflectorUtil.getFoodData(player);
+
+        if (isEnabled(player)) {
+            foodData.saturatedRegenRate = foodData.unsaturatedRegenRate;
+        } else
+            foodData.saturatedRegenRate = 10;
+    }
+
+    @Override
+    public void onModesetChange(Player player) {
+        adjustSaturatedRegenRate(player);
+    }
+
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        adjustSaturatedRegenRate(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerChangeWorld(PlayerChangedWorldEvent event) {
+        adjustSaturatedRegenRate(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        adjustSaturatedRegenRate(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerQuitEvent(PlayerQuitEvent event) {
+        adjustSaturatedRegenRate(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onEntityExhaustion(EntityExhaustionEvent event) {
+        if (event.isCancelled()) return;
+
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        EntityExhaustionEvent.ExhaustionReason reason = event.getExhaustionReason();
+        float exhaustion = event.getExhaustion();
+        SpigotWorldConfig spigotConfig = ReflectorUtil.getSpigotConfig(player.getWorld());
+
+        float amount = switch (reason) {
+            case BLOCK_MINED -> 0.025F;
+            case HUNGER_EFFECT -> quotient(exhaustion, 0.025F, 0.005F);
+            case ATTACK -> 0.3F;
+            case REGEN -> 3F;
+            case DAMAGED -> exhaustionByLastDamage(player);
+            case UNKNOWN, CROUCH -> 0F;
+
+            case SWIM, WALK_UNDERWATER, WALK_ON_WATER ->
+                    quotient(exhaustion, 0.015F, spigotConfig.swimMultiplier);
+
+            case SPRINT -> quotient(exhaustion, 0.099999994F, spigotConfig.sprintMultiplier);
+            case WALK -> quotient(exhaustion, 0.01F, spigotConfig.otherMultiplier);
+            case JUMP -> 0.2F;
+            case JUMP_SPRINT -> 0.8F;
+        };
+
+        event.setExhaustion(amount);
+    }
+
+    private float quotient(float value, float oldCombatValue, float newCombatValue) {
+        if (newCombatValue == 0) return 0;
+        return value * (oldCombatValue / newCombatValue);
+    }
+
+
+    private float exhaustionByLastDamage(Player player) {
+        EntityDamageEvent lastDamageCause = player.getLastDamageCause();
+        if (lastDamageCause == null) return 0;
+
+        if (Reflector.versionIsNewerOrEqualTo(1, 20, 4)) {
+            org.bukkit.damage.DamageType damageType = lastDamageCause.getDamageSource().getDamageType();
+            if (DamageTypeTags.BYPASSES_ARMOR.isTagged(damageType))
+                return 0;
+
+        } else if (bypassesArmorCauses.contains(lastDamageCause.getCause()))
+            return 0;
+
+        return 0.3F;
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onEntityRegainHealth(EntityRegainHealthEvent event) {
+        if (event.isCancelled()) return;
+
+        Entity entity = event.getEntity();
+        if (!(entity instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        if (event.getRegainReason() == EntityRegainHealthEvent.RegainReason.SATIATED && event.isFastRegen())
+            event.setAmount(1.0F);
     }
 }
