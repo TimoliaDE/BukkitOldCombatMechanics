@@ -52,8 +52,11 @@ public class Reflector {
      * @return true if the server version is newer or equal to the one provided
      */
     public static boolean versionIsNewerOrEqualTo(int major, int minor, int patch) {
-        if (getMajorVersion() < major) return false;
-        if (getMinorVersion() < minor) return false;
+        int majorVersion = getMajorVersion();
+        int minorVersion = getMinorVersion();
+
+        if (majorVersion != major) return majorVersion >= major;
+        if (minorVersion != minor) return minorVersion >= minor;
         return getPatchVersion() >= patch;
     }
 
@@ -78,6 +81,57 @@ public class Reflector {
             return Class.forName(fqn);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Couldn't load class " + fqn, e);
+        }
+    }
+
+
+    public static Method getMethod0(Class<?> clazz, String name) {
+        System.out.println("________________________________________________________________________________________");
+        return Arrays.stream(clazz.getMethods())
+                .filter(method -> {
+                    System.out.println("---------");
+                    System.out.println("Vergleich - M: " + method.getName() + " <-> " + name);
+                    System.out.println("Bedingung - M: " + method.getName().equals(name));
+                    return method.getName().equals(name);
+                })
+                .findFirst()
+                .orElse(null);
+    }
+
+    public static Method getMethod0(Class<?> clazz, String name, int parameterCount) {
+        System.out.println("________________________________________________________________________________________");
+        return Arrays.stream(clazz.getMethods())
+                .filter(method -> {
+                    if (method.getParameterCount() != parameterCount) return false;
+
+                    System.out.println("---------");
+                    System.out.println("Vergleich - M0: " + method.getName() + " <-> " + name);
+                    System.out.println("Bedingung - M0: " + method.getName().equals(name));
+                    return method.getName().equals(name);
+                })
+                .findFirst()
+                .orElse(null);
+    }
+
+    public static Field getField0(Class<?> clazz, String fieldName) {
+        System.out.println("________________________________________________________________________________________");
+        try {
+            Field field0 = Arrays.stream(clazz.getFields())
+                    .filter(field -> {
+                        System.out.println("---------");
+                        System.out.println("Vergleich - F: " + field.getName() + " <-> " + fieldName);
+                        System.out.println("Bedingung - F: " + field.getName().equals(fieldName));
+                        return field.getName().equals(fieldName);
+                    })
+                    .findFirst()
+                    .orElse(null);
+            if (field0 == null) return null;
+
+            Field field = clazz.getField(fieldName);
+            field.setAccessible(true);
+            return field;
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -186,6 +240,16 @@ public class Reflector {
 
     public static Field getField(Class<?> clazz, String fieldName) {
         try {
+            Field field = clazz.getField(fieldName);
+            field.setAccessible(true);
+            return field;
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Field getDeclaredField(Class<?> clazz, String fieldName) {
+        try {
             Field field = clazz.getDeclaredField(fieldName);
             field.setAccessible(true);
             return field;
@@ -243,10 +307,12 @@ public class Reflector {
         return matchingField.get(object);
     }
 
-    public static Object getFieldValue(Field field, Object handle) {
+    public static <T> T getFieldValue(Field field, Object handle) {
         field.setAccessible(true);
         try {
-            return field.get(handle);
+            @SuppressWarnings("unchecked")
+            T t = (T) field.get(handle);
+            return t;
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -288,6 +354,36 @@ public class Reflector {
                 .findFirst()
                 .orElse(null);
     }
+
+    public static Object newInstance(Constructor<?> constructor, Object... initArgs) {
+        try {
+            return constructor.newInstance(initArgs);
+        } catch (InvocationTargetException e) {
+            throw new RuntimeException("InvocationTargetException of " + constructor, e);
+        } catch (InstantiationException e) {
+            throw new RuntimeException("InstantiationException of " + constructor, e);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("IllegalAccessException of " + constructor, e);
+        }
+    }
+
+    public static Constructor<?> newInstance(Class<?> clazz, String... parameterTypeSimpleNames) {
+        Function<Constructor<?>, List<String>> getParameterNames = constructor -> Arrays
+                .stream(constructor.getParameters())
+                .map(Parameter::getType)
+                .map(Class::getSimpleName)
+                .collect(Collectors.toList());
+        List<String> typeNames = Arrays.asList(parameterTypeSimpleNames);
+        return Stream.concat(
+                        Arrays.stream(clazz.getDeclaredConstructors()),
+                        Arrays.stream(clazz.getConstructors())
+                )
+                .filter(constructor -> getParameterNames.apply(constructor).equals(typeNames))
+                .peek(it -> it.setAccessible(true))
+                .findFirst()
+                .orElse(null);
+    }
+
 
     /**
      * Finds a constructor where the provided parameter types are assignable to the constructor parameters.

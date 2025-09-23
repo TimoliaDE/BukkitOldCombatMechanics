@@ -30,7 +30,7 @@ public class VersionCompatUtils {
      * @param spigotObject The spigot object to get the handle of, e.g. Player
      * @return The Craft object
      */
-    private static Object getCraftHandle(Object spigotObject) {
+    public static Object getCraftHandle(Object spigotObject) {
         final Class<?> clazz = spigotObject.getClass();
         Method handle = handleMethodCache.get(clazz);
         if (handle == null) {

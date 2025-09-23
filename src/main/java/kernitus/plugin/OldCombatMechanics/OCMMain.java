@@ -158,10 +158,31 @@ public class OCMMain extends JavaPlugin {
             Bukkit.getScheduler().runTaskLaterAsynchronously(this,
                     () -> new UpdateChecker(this).performUpdate(), 20L);
 
-        metrics.addCustomChart(new SimplePie("auto_update_pie",
-                () -> Config.moduleSettingEnabled("update-checker",
-                        "auto-update") ? "enabled" : "disabled"));
+//        metrics.addCustomChart(new SimplePie("auto_update_pie",
+//                () -> Config.moduleSettingEnabled("update-checker",
+//                        "auto-update") ? "enabled" : "disabled"));
 
+//        System.out.println("________________________________________________________________________________________");
+//        Reflector.getMethod0(LivingEntity.class, "LivingEntityMethod");
+//        Reflector.getMethod0(Entity.class, "EntityMethod");
+//        Reflector.getMethod0(Level.class, "paperConfig", 0);
+
+//        try {
+//            World world = Bukkit.getWorlds().getFirst();
+//            org.bukkit.entity.LivingEntity entity = world.getLivingEntities().getFirst();
+//            ((CraftEntity) entity).getHandle();
+//            System.out.println("Erfolgreich 1");
+//        } catch (NoClassDefFoundError error) {
+//            System.out.println("Klasse nicht gefunden 1");
+//        }
+//
+//        try {
+//            World world = Bukkit.getWorlds().getFirst();
+//            ((CraftWorld) world).getHandle();
+//            System.out.println("Erfolgreich 2");
+//        } catch (NoClassDefFoundError error) {
+//            System.out.println("Klasse nicht gefunden 2");
+//        }
     }
 
     @Override
@@ -243,6 +264,12 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleGoldenApple(this));
         ModuleLoader.addModule(new ModuleFishingKnockback(this));
         ModuleLoader.addModule(new ModulePlayerKnockback(this));
+        ModuleLoader.addModule(new ModuleOldProjectileTrajectory(this));
+        ModuleLoader.addModule(new ModuleNoDeflectFireProjectile(this));
+        ModuleLoader.addModule(new ModuleOldBowDamage(this));
+        ModuleLoader.addModule(new ModuleFixBowShoot(this));
+        ModuleLoader.addModule(new ModuleOldFallDamage(this));
+        ModuleLoader.addModule(new ModuleOldWaterPlacement(this));
         ModuleLoader.addModule(new ModulePlayerRegen(this));
 
         ModuleLoader.addModule(new ModuleDisableCrafting(this));
@@ -263,6 +290,60 @@ public class OCMMain extends JavaPlugin {
         } else {
             Messenger.warn("No ProtocolLib detected, attack-sounds and sword-sweep-particles modules will be disabled");
         }
+
+//        var types = List.of(DamageType.ARROW,
+//        DamageType.BAD_RESPAWN_POINT,
+//        DamageType.CACTUS,
+//        DamageType.CAMPFIRE,
+//        DamageType.CRAMMING,
+//        DamageType.DRAGON_BREATH,
+//        DamageType.DROWN,
+//        DamageType.DRY_OUT,
+//        DamageType.ENDER_PEARL,
+//        DamageType.EXPLOSION,
+//        DamageType.FALL,
+//        DamageType.FALLING_ANVIL,
+//        DamageType.FALLING_BLOCK,
+//        DamageType.FALLING_STALACTITE,
+//        DamageType.FIREBALL,
+//        DamageType.FIREWORKS,
+//        DamageType.FLY_INTO_WALL,
+//        DamageType.FREEZE,
+//        DamageType.GENERIC,
+//        DamageType.GENERIC_KILL,
+//        DamageType.HOT_FLOOR,
+//        DamageType.IN_FIRE,
+//        DamageType.IN_WALL,
+//        DamageType.INDIRECT_MAGIC,
+//        DamageType.LAVA,
+//        DamageType.LIGHTNING_BOLT,
+//        DamageType.MACE_SMASH,
+//        DamageType.MAGIC,
+//        DamageType.MOB_ATTACK,
+//        DamageType.MOB_ATTACK_NO_AGGRO,
+//        DamageType.MOB_PROJECTILE,
+//        DamageType.ON_FIRE,
+//        DamageType.OUT_OF_WORLD,
+//        DamageType.OUTSIDE_BORDER,
+//        DamageType.PLAYER_ATTACK,
+//        DamageType.PLAYER_EXPLOSION,
+//        DamageType.SONIC_BOOM,
+//        DamageType.SPIT,
+//        DamageType.STALAGMITE,
+//        DamageType.STARVE,
+//        DamageType.STING,
+//        DamageType.SWEET_BERRY_BUSH,
+//        DamageType.THORNS,
+//        DamageType.THROWN,
+//        DamageType.TRIDENT,
+//        DamageType.UNATTRIBUTED_FIREBALL,
+//        DamageType.WIND_CHARGE,
+//        DamageType.WITHER,
+//        DamageType.WITHER_SKULL);
+//
+//        var bypassedArmorList = types.stream().filter(DamageTypeTags.BYPASSES_ARMOR::isTagged)
+//                .map(type -> type.key().asString().toUpperCase()).toList();
+//        System.out.println("bypassedArmorList: " + bypassedArmorList);
     }
 
     private void registerHooks() {
