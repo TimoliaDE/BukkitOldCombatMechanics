@@ -48,27 +48,11 @@ public class ModuleOldBowDamage extends OCMModule {
             int power = bow.getEnchantmentLevel(XEnchantment.POWER.get());
             float force = event.getForce();
 
-            // 1.20: 1
-            // 1.20.1: 1
-            // 1.20.2: 1
-            // 1.20.4: 1
-            // 1.20.5: 3
-            // 1.21.4: 3
-            // 1.21.5: 1
-            // 1.21.6: 1
-            // 1.21.7: 1
-            // 1.21.8: 1
-
-            System.out.println("Force vor: " + force);
-
-            // Since 1.20.5?
             // For the versions 1.20.5 to 1.21.4, the force was changed from [0,3] to [0,1]
             if (Reflector.versionIsNewerOrEqualTo(1, 20, 5) &&
                     !Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
                 force /= 3.0F;
             }
-
-            System.out.println("Force nach: " + force);
 
             double powerDmg = power > 0 ? (double) power * 0.5 + 0.5 : 0;
             abstractArrow.setDamage(force * 2.0 + powerDmg);
