@@ -132,7 +132,7 @@ public class ModulePlayerRegen extends OCMModule {
         EntityDamageEvent lastDamageCause = player.getLastDamageCause();
         if (lastDamageCause == null) return 0;
 
-        if (Reflector.versionIsNewerOrEqualTo(1, 20, 4)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             org.bukkit.damage.DamageType damageType = lastDamageCause.getDamageSource().getDamageType();
             if (DamageTypeTags.BYPASSES_ARMOR.isTagged(damageType))
                 return 0;

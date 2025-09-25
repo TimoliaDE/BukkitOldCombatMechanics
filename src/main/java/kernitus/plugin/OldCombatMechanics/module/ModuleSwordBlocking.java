@@ -98,7 +98,21 @@ public class ModuleSwordBlocking extends OCMModule {
 
         if (!isEnabled(player)) return;
 
+        boolean usingHand = e.getHand() == EquipmentSlot.HAND;
+
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+            PlayerInventory inv = player.getInventory();
+            ItemStack mainhandItem = inv.getItemInMainHand();
+
+            // Ensures that the offhand shield is priorizied when using a blocking sword
+            // in the mainhand
+            if (hasShieldNoCooldown(player) && usingHand && ItemUtil.hasBlockHit(mainhandItem)) {
+                removeBlockAttributesFromHoldingSword(player);
+                e.setCancelled(true);
+                Bukkit.getScheduler().runTask(plugin, () -> player.startUsingItem(EquipmentSlot.OFF_HAND));
+                return;
+            }
+
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -107,7 +121,7 @@ public class ModuleSwordBlocking extends OCMModule {
         // If they clicked on an interactive block, the 2nd event with the offhand won't fire
         // This is also the case if the main hand item was used, e.g. a bow
         // TODO right-clicking on a mob also only fires one hand
-        if (action == Action.RIGHT_CLICK_BLOCK && e.getHand() == EquipmentSlot.HAND) return;
+        if (action == Action.RIGHT_CLICK_BLOCK && usingHand) return;
         if (e.isBlockInHand()) {
             if (lastInteractedBlocks != null) {
                 final Block clickedBlock = e.getClickedBlock();
@@ -307,6 +321,11 @@ public class ModuleSwordBlocking extends OCMModule {
         return inventory.getItemInOffHand().getType() == Material.SHIELD;
     }
 
+    private boolean hasShieldNoCooldown(Player player) {
+        PlayerInventory inv = player.getInventory();
+        return hasShield(inv) && !player.hasCooldown(inv.getItemInOffHand());
+    }
+
     private boolean isHoldingSword(Material mat) {
         return mat.toString().endsWith("_SWORD");
     }
@@ -327,5 +346,15 @@ public class ModuleSwordBlocking extends OCMModule {
 
         if (updatedSwords)
             player.updateInventory();
+    }
+
+    public void removeBlockAttributesFromHoldingSword(Player player) {
+        PlayerInventory inv = player.getInventory();
+        ItemStack mainItem = inv.getItemInMainHand();
+
+        if (ItemUtil.hasBlockHit(mainItem)) {
+            ItemUtil.removeWeaponAttributes(mainItem);
+            inv.setItem(EquipmentSlot.HAND, mainItem);
+        }
     }
 }

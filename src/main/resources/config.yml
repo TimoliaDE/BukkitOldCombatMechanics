@@ -64,11 +64,11 @@ mode-messages:
   # Messages used when changing player mode
   # To disable any message, leave the corresponding string empty (e.g., mode-status: "").
   # This applies to all messages in the configuration.
-  mode-status: ""
+  mode-status: "&bYour current modeset is: &7%s"
   message-usage: "&eYou can use &c/ocm mode <modeset> [player] &eto change modeset"
   invalid-modeset: "&cPlease specify a valid modeset!"
   invalid-player: "&cPlease specify a valid player!"
-  mode-set: "&2Set modeset to &7%s"
+  mode-set: ""
 
 # ########################
 # COMBAT MODULE SETTINGS
@@ -238,6 +238,8 @@ old-player-knockback:
   # other entities.
   # It does not affect the knockback dealt by mobs other than players.
   # Default values are as in 1.8.
+  # If enabled, entities remain immune to knockback if their knockback resistance
+  # value is 100 or above.
   #
   # Minigame servers use higher vertical knockback and lower horizontal knockback, exact values are unknown.
   enabled: true
@@ -258,23 +260,32 @@ old-player-knockback:
   # Increase to make sprint resetting (w-tapping) more important, decrease to make it less important
   # Increase to make clicking more important, decrease to make clicking less important
   knockback-extra-melee-horizontal: 0.5
-  # The horizontal knockback from ranged attacks is usually a bit higher than that of melee attacks.
-  knockback-extra-ranged-horizontal: 0.6
   # Extra vertical knockback is applied for each level of knockback enchant, and for sprinting
   # Increase to make sprint resetting (w-tapping) more important, decrease to make it less important
   # Increase to make clicking less important, decrease to make clicking more important
-  knockback-extra-vertical: 0.1
+  knockback-extra-melee-vertical: 0.1
+  # The horizontal knockback from ranged attacks is usually a bit higher than that of melee attacks.
+  knockback-extra-ranged-horizontal: 0.6
+  knockback-extra-ranged-vertical: 0.1
   # Whether to stop sprinting when dealing extra knockback
   disable-sprinting: true
   # Whether to enable old knockback resistance:
   # 1.8 -> true: Determines the chance of applying the base knockback.
   # 1.9+ -> false: Reduces the base knockback by a relative amount
-  # This effect depends on the knockback resistance attribute and in the config.
+  # The effect of both options depends on the knockback resistance
+  # attribute, which ranges from 0 to 1.
   # When enabled, this applies to living entities except for players.
   old-knockback-resistance-mobs: true
   # When enabled, this applies to players only.
   # This is disabled by default so that netherite armor works correctly.
   old-knockback-resistance-players: false
+  # When enabled, the arrow hit sound will be played if an arrow hits
+  # another player blocking with a sword.
+  # This option requires ProtocolLib
+  arrow-hit-sound: true
+  # When enabled, arrows that hit a player blocking with a sword
+  # visually stick into the player's body instead of being deflected.
+  no-deflect-arrow: true
 
 old-projectile-trajectory:
   # This disables the relative projectile velocity. In other words,
@@ -300,7 +311,7 @@ fix-bow-shoot:
   # even though it works server-side when using a bow. This does not apply to crossbows.
   # However, the arrow may be launched slightly delayed.
   # Only supported in version 1.21.3 and later.
-  enabled: false
+  enabled: true
 
 old-fall-damage:
   # This matches the fall damage to 1.8 version.
