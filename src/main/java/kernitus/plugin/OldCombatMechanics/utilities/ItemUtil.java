@@ -30,4 +30,8 @@ public class ItemUtil {
 
         ReflectorUtil.setBlocksAttacks(iStack, blocksAttacks);
     }
+
+    public static void removeWeaponAttributes(ItemStack iStack) {
+        ReflectorUtil.setBlocksAttacks(iStack, null);
+    }
 }

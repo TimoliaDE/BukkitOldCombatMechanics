@@ -84,57 +84,6 @@ public class Reflector {
         }
     }
 
-
-    public static Method getMethod0(Class<?> clazz, String name) {
-        System.out.println("________________________________________________________________________________________");
-        return Arrays.stream(clazz.getMethods())
-                .filter(method -> {
-                    System.out.println("---------");
-                    System.out.println("Vergleich - M: " + method.getName() + " <-> " + name);
-                    System.out.println("Bedingung - M: " + method.getName().equals(name));
-                    return method.getName().equals(name);
-                })
-                .findFirst()
-                .orElse(null);
-    }
-
-    public static Method getMethod0(Class<?> clazz, String name, int parameterCount) {
-        System.out.println("________________________________________________________________________________________");
-        return Arrays.stream(clazz.getMethods())
-                .filter(method -> {
-                    if (method.getParameterCount() != parameterCount) return false;
-
-                    System.out.println("---------");
-                    System.out.println("Vergleich - M0: " + method.getName() + " <-> " + name);
-                    System.out.println("Bedingung - M0: " + method.getName().equals(name));
-                    return method.getName().equals(name);
-                })
-                .findFirst()
-                .orElse(null);
-    }
-
-    public static Field getField0(Class<?> clazz, String fieldName) {
-        System.out.println("________________________________________________________________________________________");
-        try {
-            Field field0 = Arrays.stream(clazz.getFields())
-                    .filter(field -> {
-                        System.out.println("---------");
-                        System.out.println("Vergleich - F: " + field.getName() + " <-> " + fieldName);
-                        System.out.println("Bedingung - F: " + field.getName().equals(fieldName));
-                        return field.getName().equals(fieldName);
-                    })
-                    .findFirst()
-                    .orElse(null);
-            if (field0 == null) return null;
-
-            Field field = clazz.getField(fieldName);
-            field.setAccessible(true);
-            return field;
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     public static Method getMethod(Class<?> clazz, String name) {
         return Arrays.stream(clazz.getMethods())
                 .filter(method -> method.getName().equals(name))
@@ -147,6 +96,19 @@ public class Reflector {
                 .filter(method -> method.getName().equals(name) && method.getParameterCount() == parameterCount)
                 .findFirst()
                 .orElse(null);
+    }
+
+    public static Method getMethod(Class<?> clazz, String name, int parameterCount, Class<?>... parameterTypes) {
+        if (parameterTypes.length != parameterCount)
+            throw new IllegalArgumentException("Number of provided parameter classes does not match parameterCount");
+
+        return Arrays.stream(clazz.getMethods())
+                .filter(method -> method.getName().equals(name))
+                .filter(method -> method.getParameterCount() == parameterCount)
+                .filter(method -> Arrays.equals(method.getParameterTypes(), parameterTypes))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No method '" + name +
+                        "' with the specified parameters found in " + clazz.getName()));
     }
 
     public static Method getMethod(Class<?> clazz, Class<?> returnType, String... parameterTypeSimpleNames){

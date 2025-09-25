@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.entity.EntityDamageEvent.DamageModifier;
 import org.bukkit.event.player.PlayerItemDamageEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -32,12 +33,14 @@ public class ModuleShieldDamageReduction extends OCMModule {
     private int genericDamageReductionAmount, genericDamageReductionPercentage,
             projectileDamageReductionAmount, projectileDamageReductionPercentage;
     private boolean swordsOnly;
-    private final Map<UUID, List<ItemStack>> fullyBlocked = new WeakHashMap<>();
+    private final static Map<UUID, List<ItemStack>> fullyBlocked = new WeakHashMap<>();
+    private final static Set<UUID> blockedPlayers = new HashSet<>();
 
     public ModuleShieldDamageReduction(OCMMain plugin) {
         super(plugin, "shield-damage-reduction");
         reload();
     }
+
 
     @Override
     public void reload() {
@@ -46,6 +49,14 @@ public class ModuleShieldDamageReduction extends OCMModule {
         projectileDamageReductionAmount = module().getInt("projectileDamageReductionAmount", 1);
         projectileDamageReductionPercentage = module().getInt("projectileDamageReductionPercentage", 50);
         swordsOnly = module().getBoolean("swordsOnly", true);
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        final UUID uuid = player.getUniqueId();
+        fullyBlocked.remove(uuid);
+        blockedPlayers.remove(uuid);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -92,6 +103,8 @@ public class ModuleShieldDamageReduction extends OCMModule {
         debug("Blocking: " + baseDamage + " - " + damageReduction + " = " + currentDamage);
 
         final UUID uuid = player.getUniqueId();
+        blockedPlayers.add(uuid);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> blockedPlayers.remove(uuid), 1L);
 
         if (currentDamage <= 0) { // Make sure armour is not damaged if fully blocked
             final List<ItemStack> armour = Arrays.stream(player.getInventory().getArmorContents()).filter(Objects::nonNull).collect(Collectors.toList());
@@ -137,5 +150,13 @@ public class ModuleShieldDamageReduction extends OCMModule {
         // Only reduce damage if they were hit head on, i.e. the shield blocked some of the damage
         // This also takes into account damages that are not blocked by shields
         return attackDamage > 0 && blockingReduction < 0;
+    }
+
+    public static Map<UUID, List<ItemStack>> getFullyBlocked() {
+        return fullyBlocked;
+    }
+
+    public static Set<UUID> getBlockedPlayers() {
+        return blockedPlayers;
     }
 }

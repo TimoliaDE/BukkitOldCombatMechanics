@@ -24,6 +24,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.spigotmc.SpigotWorldConfig;
 
+import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -130,6 +131,12 @@ public class ReflectorUtil {
         return Reflector.getFieldValue(field, nmsWorld);
     }
 
+    public static Object getAsNmsCopy(ItemStack iStack) {
+        Class<?> classItemStack = Reflector.getClass("org.bukkit.craftbukkit.inventory.CraftItemStack");
+        Method nmsCopyMethod = Reflector.getMethod(classItemStack, "asNMSCopy", 1, ItemStack.class);
+        return Reflector.invokeMethod(nmsCopyMethod, null, iStack);
+    }
+
     public static void spawnProjectile(World world, AbstractArrow arrow, ItemStack bow) {
         if (isLatestVersionedPackage()) {
             net.minecraft.world.entity.projectile.AbstractArrow nmsArrow =
@@ -140,17 +147,21 @@ public class ReflectorUtil {
             return;
         }
 
+        Object nmsBowCopy = getAsNmsCopy(bow);
         Object nmsWorld = VersionCompatUtils.getCraftHandle(world);
         Object nmsArrow = VersionCompatUtils.getCraftHandle(arrow);
         Reflector.invokeMethod(Reflector.getMethod(nmsArrow.getClass(), "spawnProjectile",
-                3), nmsArrow, nmsArrow, nmsWorld, CraftItemStack.asNMSCopy(bow));
+                3), nmsArrow, nmsArrow, nmsWorld, nmsBowCopy);
     }
 
     public static Object getNmsItemStack(ItemStack iStack) {
         return Reflector.getFieldValue(Reflector.getField(iStack.getClass(), "handle"), iStack);
     }
 
-    public static boolean hasBlocksAttacks(ItemStack iStack) {
+    public static boolean hasBlocksAttacks(@Nullable ItemStack iStack) {
+        if (iStack == null)
+            return false;
+
         if (isLatestVersionedPackage())
             return CraftItemStack.unwrap(iStack).has(DataComponents.BLOCKS_ATTACKS);
 
@@ -159,17 +170,17 @@ public class ReflectorUtil {
         return Reflector.invokeMethod(method, nmsStack, getComponentBlocksAttacks());
     }
 
-    public static void setBlocksAttacks(ItemStack iStack, BlocksAttacks blocksAttacks) {
+    public static void setBlocksAttacks(ItemStack iStack, @Nullable BlocksAttacks blocksAttacks) {
         if (isLatestVersionedPackage()) {
-            net.minecraft.world.item.component.BlocksAttacks nmsBlocksAttacks =
-                    ((PaperBlocksAttacks) blocksAttacks).getHandle();
+            net.minecraft.world.item.component.BlocksAttacks nmsBlocksAttacks = blocksAttacks != null ?
+                    ((PaperBlocksAttacks) blocksAttacks).getHandle() : null;
             CraftItemStack.unwrap(iStack).set(DataComponents.BLOCKS_ATTACKS, nmsBlocksAttacks);
             return;
         }
 
         Object nmsStack = getNmsItemStack(iStack);
         Method method = Reflector.getMethod(nmsStack.getClass(), "set", 2);
-        Object nmsBlocksAttacks = VersionCompatUtils.getCraftHandle(blocksAttacks);
+        Object nmsBlocksAttacks = blocksAttacks != null ? VersionCompatUtils.getCraftHandle(blocksAttacks) : null;
         Reflector.invokeMethod(method, nmsStack, getComponentBlocksAttacks(), nmsBlocksAttacks);
     }
 
