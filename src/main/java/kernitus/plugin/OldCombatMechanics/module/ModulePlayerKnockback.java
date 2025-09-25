@@ -5,10 +5,14 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolManager;
+import com.comphenix.protocol.events.PacketContainer;
 import com.cryptomorin.xseries.XAttribute;
 import com.cryptomorin.xseries.XEnchantment;
 import io.papermc.paper.event.entity.EntityPushedByEntityAttackEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.versions.ReflectorUtil;
 import net.minecraft.util.RandomSource;
@@ -50,20 +54,29 @@ public class ModulePlayerKnockback extends OCMModule {
     private double knockbackVerticalFriction;
     private double knockbackVerticalLimit;
     private double knockbackExtraMeleeHorizontal;
+    private double knockbackExtraMeleeVertical;
     private double knockbackExtraRangedHorizontal;
-    private double knockbackExtraVertical;
+    private double knockbackExtraRangedVertical;
     private boolean disableSprinting;
     private boolean oldKnockbackResistancePlayers;
     private boolean oldKnockbackResistanceMobs;
+    private boolean arrowHitSound;
+    private boolean noDeflectArrow;
 
     private final Map<UUID, Vector> playerKnockback = new WeakHashMap<>();
-    private final Map<UUID, Vector> playerKnockbackCopy = new WeakHashMap<>();
+    private final Map<UUID, Vector> playerRangedKnockback = new WeakHashMap<>();
     private final Set<UUID> ignoreKnockbackHashMap = new HashSet<>();
     private final Map<UUID, Boolean> blockHitSet = new WeakHashMap<>();
+    private final Map<UUID, AbstractArrow> blockHitArrows = new WeakHashMap<>();
 
     public ModulePlayerKnockback(OCMMain plugin) {
         super(plugin, "old-player-knockback");
         reload();
+
+        if (plugin.getProtocolManager() == null) {
+            Messenger.warn("No ProtocolLib detected, the arrow-hit-sound " +
+                    "option will be disabled in the old-player-knockback");
+        }
     }
 
     public void reload() {
@@ -73,11 +86,14 @@ public class ModulePlayerKnockback extends OCMModule {
         knockbackVerticalFriction = module().getDouble("knockback-vertical-friction", 0.5);
         knockbackVerticalLimit = module().getDouble("knockback-vertical-limit", 0.4);
         knockbackExtraMeleeHorizontal = module().getDouble("knockback-extra-melee-horizontal", 0.5);
+        knockbackExtraMeleeVertical = module().getDouble("knockback-extra-melee-vertical", 0.1);
         knockbackExtraRangedHorizontal = module().getDouble("knockback-extra-ranged-horizontal", 0.6);
-        knockbackExtraVertical = module().getDouble("knockback-extra-vertical", 0.1);
+        knockbackExtraRangedVertical = module().getDouble("knockback-extra-ranged-vertical", 0.1);
         disableSprinting = module().getBoolean("disable-sprinting", true);
         oldKnockbackResistancePlayers = module().getBoolean("old-knockback-resistance-players", true);
         oldKnockbackResistanceMobs = module().getBoolean("old-knockback-resistance-mobs", true);
+        arrowHitSound = module().getBoolean("arrow-hit-sound", true) && plugin.getProtocolManager() != null;
+        noDeflectArrow = module().getBoolean("no-deflect-arrow", true);
     }
 
     @EventHandler
@@ -85,28 +101,27 @@ public class ModulePlayerKnockback extends OCMModule {
         Player player = event.getPlayer();
         final UUID uuid = player.getUniqueId();
         playerKnockback.remove(uuid);
-        playerKnockbackCopy.remove(uuid);
+        playerRangedKnockback.remove(uuid);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void handlePlayerVelocity(PlayerVelocityEvent event) {
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPlayerVelocity(PlayerVelocityEvent event) {
         Player player = event.getPlayer();
 
         final UUID uuid = player.getUniqueId();
-        Vector velocity = playerKnockbackCopy.get(uuid);
+        Vector velocity = playerRangedKnockback.get(uuid);
 
+        // Ensures that knockback from ranged player attacks matches 1.8 pvp
         if (velocity != null) {
             event.setVelocity(velocity);
-            playerKnockbackCopy.remove(uuid);
+            playerRangedKnockback.remove(uuid);
         }
     }
 
     // Use the "EntityPushedByEntityAttackEvent" event instead of "EntityKnockbackByEntityEvent" in order
-    // to fix the knockback from the projectiles (e. g. arrows)
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void handleEntityPushedByEntityAttackEvent(EntityPushedByEntityAttackEvent event) {
-        if (event.isCancelled()) return;
-
+    // to fix the knockback from the projectiles (e.g. arrows)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEntityPushedByEntityAttack(EntityPushedByEntityAttackEvent event) {
         Entity entity = event.getEntity();
         if (!(entity instanceof LivingEntity livingEntity)) return;
 
@@ -149,16 +164,20 @@ public class ModulePlayerKnockback extends OCMModule {
             Location loc = new Location(entity.getWorld(), 0, 0, 0);
             loc.setDirection(knockback);
             float yaw = loc.getYaw();
+
+            AbstractArrow abstractArrow = blockHitArrows.get(uuid);
+            if (noDeflectArrow && abstractArrow != null) {
+                abstractArrow.remove();
+                livingEntity.setArrowsInBody(livingEntity.getArrowsInBody() + 1);
+            }
+
             livingEntity.playHurtAnimation(yaw);
             blockHitSet.remove(uuid);
         }
     }
 
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onEntityDamageEntity(EntityDamageByEntityEvent event) {
-        if (event.isCancelled()) return;
-
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         final Entity damager = event.getDamager();
         if (!(damager instanceof LivingEntity) && !(damager instanceof Projectile))
             return;
@@ -182,10 +201,9 @@ public class ModulePlayerKnockback extends OCMModule {
         }
 
         boolean useBlockHit = false;
-        double blockingDamage = event.getDamage(EntityDamageEvent.DamageModifier.BLOCKING);
 
-        if (blockingDamage < 0) {
-            if (-blockingDamage >= event.getDamage())
+        if (hasBlocked(event)) {
+            if (hasFullBlockedModule(damagee) || hasFullBlockedVanilla(event))
                 return;
 
             Sound hurtSound = livingDamagee.getHurtSound();
@@ -195,6 +213,14 @@ public class ModulePlayerKnockback extends OCMModule {
 
                 float pitch = (random.nextFloat() - random.nextFloat()) * 0.2F + 1.0F;
                 livingDamagee.getWorld().playSound(livingDamagee.getLocation(), hurtSound, volume, pitch);
+
+                if (arrowHitSound && damager instanceof AbstractArrow abstractArrow &&
+                        !(damager instanceof Trident) && abstractArrow.getShooter() instanceof Player player &&
+                        isProjectile && !abstractArrow.isSilent() && damagee instanceof Player damageePlayer &&
+                        player != damageePlayer) {
+                    sendArrowHitSound(player);
+                }
+
                 useBlockHit = true;
             }
         }
@@ -230,13 +256,20 @@ public class ModulePlayerKnockback extends OCMModule {
         double resistanceFactor = 1;
         AttributeInstance attribute = livingDamagee.getAttribute(XAttribute.KNOCKBACK_RESISTANCE.get());
         boolean hasBaseKnockback = true;
-        boolean usingCoincidence = oldKnockbackResistancePlayers && damager instanceof Player ||
-                oldKnockbackResistanceMobs && !(damager instanceof Player);
+        boolean usingCoincidence = oldKnockbackResistancePlayers && damagee instanceof Player ||
+                oldKnockbackResistanceMobs && !(damagee instanceof Player);
 
         if (attribute != null) {
+            double value = attribute.getValue();
+            // Some plugins make entities immune to knockback by setting their knockback resistance
+            // to a high value. Therefore, this effect only applies if the value is 100 or above:
+            if (value < 100)
+                return;
+
             // Allow netherite to affect the horizontal knockback. Each piece of armour
             // yields 10% resistance
-            resistanceFactor = Math.max(0, 1 - attribute.getValue());
+            resistanceFactor = Math.max(0, 1 - value);
+
 
             if (usingCoincidence)
                 hasBaseKnockback = new Random().nextDouble() < resistanceFactor;
@@ -270,7 +303,7 @@ public class ModulePlayerKnockback extends OCMModule {
 
                 if (bonusKnockback > 0) { // Apply bonus knockback
                     playerVelocity.add(new Vector((-Math.sin(attacker.getLocation().getYaw() * 3.1415927F / 180.0F) *
-                            (float) bonusKnockback * knockbackExtraMeleeHorizontal), knockbackExtraVertical,
+                            (float) bonusKnockback * knockbackExtraMeleeHorizontal), knockbackExtraMeleeVertical,
                             Math.cos(attacker.getLocation().getYaw() * 3.1415927F / 180.0F) * (float) 
                                     bonusKnockback * knockbackExtraMeleeHorizontal));
                 }
@@ -290,7 +323,7 @@ public class ModulePlayerKnockback extends OCMModule {
 
             if (bonusKnockback > 0) { // Apply bonus knockback
                 playerVelocity.add(new Vector(-xDir * (float) bonusKnockback * knockbackExtraRangedHorizontal,
-                        knockbackExtraVertical,
+                        knockbackExtraRangedVertical,
                         -zDir * (float) bonusKnockback * knockbackExtraRangedHorizontal));
             }
         }
@@ -299,18 +332,11 @@ public class ModulePlayerKnockback extends OCMModule {
             playerVelocity.multiply(new Vector(resistanceFactor, 1, resistanceFactor));
 
         final UUID victimId = damagee.getUniqueId();
-
         boolean fromPlayer = damager instanceof Player || damager instanceof Projectile proj &&
                 proj.getShooter() instanceof Player;
-        boolean finalUseBlockHit = useBlockHit;
 
         if (!fromPlayer) {
-            if (finalUseBlockHit)
-                blockHitSet.put(victimId, false);
-
-            // Sometimes EntityKnockbackByEntityEvent doesn't fire, remove data to not affect later
-            // events if that happens
-            Bukkit.getScheduler().runTaskLater(plugin, () -> blockHitSet.remove(victimId), 1);
+            handleBlockHit(damager, victimId, useBlockHit, false);
             return;
         }
 
@@ -325,13 +351,26 @@ public class ModulePlayerKnockback extends OCMModule {
 
         // Sometimes PlayerVelocityEvent doesn't fire, remove data to not affect later
         // events if that happens
-        if (damagerSource instanceof Projectile && damagee instanceof Player) {
-            playerKnockbackCopy.put(victimId, playerVelocity);
-            Bukkit.getScheduler().runTaskLater(plugin, () -> playerKnockbackCopy.remove(victimId), 1);
+        if (damager instanceof Projectile && damagee instanceof Player) {
+            playerRangedKnockback.put(victimId, playerVelocity);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> playerRangedKnockback.remove(victimId), 2);
         }
 
-        if (useBlockHit)
-            blockHitSet.put(victimId, true);
+        handleBlockHit(damager, victimId, useBlockHit, true);
+    }
+
+    private void handleBlockHit(Entity damager, UUID victimId, boolean useBlockhit, boolean fromPlayer) {
+        if (useBlockhit)
+            blockHitSet.put(victimId, fromPlayer);
+
+        if (damager instanceof AbstractArrow abstractArrow && !(damager instanceof Trident)) {
+            blockHitArrows.put(victimId, abstractArrow);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> blockHitArrows.remove(victimId), 1);
+        }
+
+        // Sometimes EntityPushedByEntityAttackEvent doesn't fire, remove data to not affect later
+        // events if that happens
+        Bukkit.getScheduler().runTaskLater(plugin, () -> blockHitSet.remove(victimId), 1);
     }
 
     private static Vector getHorizontalDirection(Projectile proj) {
@@ -348,5 +387,46 @@ public class ModulePlayerKnockback extends OCMModule {
         double z = -Math.cos(yawRad) * Math.cos(pitchRad);
 
         return new Vector(x, 0, z).normalize();
+    }
+
+    private boolean hasBlockedModule(Entity damagee) {
+        final UUID victimId = damagee.getUniqueId();
+        Set<UUID> blockedPlayers = ModuleShieldDamageReduction.getBlockedPlayers();
+        return blockedPlayers.contains(victimId);
+    }
+
+    private boolean hasBlocked(EntityDamageByEntityEvent event) {
+        return event.getDamage(EntityDamageEvent.DamageModifier.BLOCKING) < 0 ||
+                hasBlockedModule(event.getEntity());
+    }
+
+    private boolean hasFullBlockedModule(Entity damagee) {
+        final UUID victimId = damagee.getUniqueId();
+        Map<UUID, List<ItemStack>> fullyBlocked = ModuleShieldDamageReduction.getFullyBlocked();
+        return fullyBlocked.containsKey(victimId);
+    }
+
+    private boolean hasFullBlockedVanilla(EntityDamageByEntityEvent event) {
+        // First, check if the player is not using the module shield
+        if (hasBlockedModule(event.getEntity()))
+            return false;
+
+        final double baseDamage = event.getDamage(EntityDamageEvent.DamageModifier.BASE) +
+                event.getDamage(EntityDamageEvent.DamageModifier.HARD_HAT);
+        final double blockingDamage = event.getDamage(EntityDamageEvent.DamageModifier.BLOCKING);
+
+        return -blockingDamage >= baseDamage;
+    }
+
+    private void sendArrowHitSound(Player player) {
+        try {
+            ProtocolManager manager = plugin.getProtocolManager();
+            PacketContainer packet = manager.createPacket(PacketType.Play.Server.GAME_STATE_CHANGE);
+            packet.getGameStateIDs().write(0, 6);
+            packet.getFloat().write(0, 0.0F);
+            manager.sendServerPacket(player, packet);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

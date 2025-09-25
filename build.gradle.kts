@@ -8,10 +8,7 @@ plugins {
     `java-library`
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.18"
     id("xyz.jpenilla.run-paper") version "2.3.1" // Adds runServer and runMojangMappedServer tasks for testing
-
-    // Ein Gradle-Shade-Plugin wird eingefügt, damit die Dependencies mit "implementation" in die Jar-Datei
-    // eingebunden wird
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("com.gradleup.shadow") version "9.1.0"
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
@@ -29,7 +26,7 @@ allprojects {
 }
 
 dependencies {
-    implementation("org.bstats:bstats-bukkit:3.0.2")
+    implementation("org.bstats:bstats-bukkit:3.1.0")
     // Shaded in by Bukkit
     compileOnly("io.netty:netty-all:4.1.106.Final")
     // Placeholder API
@@ -50,12 +47,33 @@ dependencies {
     implementation("xyz.jpenilla:reflection-remapper:0.1.1")
 }
 
+java {
+    // Configure the java toolchain. This allows gradle to auto-provision JDK 21 on systems
+    // that only have JDK 11 installed for example.
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
 tasks {
-    // Configure reobfJar to run when invoking the build task
     assemble {
         dependsOn(reobfJar)
     }
-
+    reobfJar {
+        doLast {
+            val buildLibs = layout.buildDirectory.dir("libs").get().asFile
+            buildLibs.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".jar") && file.name != outputs.files.singleFile.name) {
+                    file.delete()
+                }
+            }
+            val reobfFile = outputs.files.singleFile
+            val targetFile = buildLibs.resolve("${project.name}-${project.version}.jar")
+            reobfFile.renameTo(targetFile)
+        }
+    }
+    shadowJar {
+        relocate("org.bstats", "kernitus.plugin.OldCombatMechanics.lib.bstats")
+        relocate("com.cryptomorin.xseries", "kernitus.plugin.OldCombatMechanics.lib.xseries")
+    }
     compileJava {
         options.encoding = Charsets.UTF_8.name() // We want UTF-8 for everything
 
