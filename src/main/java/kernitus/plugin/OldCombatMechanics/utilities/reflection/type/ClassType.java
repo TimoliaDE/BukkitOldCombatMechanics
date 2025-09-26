@@ -6,13 +6,14 @@
 package kernitus.plugin.OldCombatMechanics.utilities.reflection.type;
 
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
+import org.bukkit.Bukkit;
 
 public enum ClassType {
 
     NMS {
         @Override
-        public String qualifyClassName(String partialName){
-            if(Reflector.versionIsNewerOrEqualTo(1, 17, 0)){
+        public String qualifyClassName(String partialName) {
+            if (Reflector.versionIsNewerOrEqualTo(1, 17, 0)) {
                 return "net.minecraft." + partialName;
             }
             // FIXME: Assumes class names are upper case and trims off the preceding package name
@@ -26,8 +27,13 @@ public enum ClassType {
     },
     CRAFTBUKKIT {
         @Override
-        public String qualifyClassName(String partialName){
-            return String.format("%s.%s.%s", "org.bukkit.craftbukkit", Reflector.getVersion(), partialName);
+        public String qualifyClassName(String partialName) {
+            if (Reflector.versionIsNewerOrEqualTo(1, 20, 5))
+                return String.format("%s.%s", "org.bukkit.craftbukkit", partialName);
+
+            String packageName = Bukkit.getServer().getClass().getPackage().getName();
+            String version = packageName.substring(packageName.lastIndexOf('.') + 1);
+            return String.format("%s.%s.%s", "org.bukkit.craftbukkit", version, partialName);
         }
     };
 
