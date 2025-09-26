@@ -7,8 +7,14 @@ package kernitus.plugin.OldCombatMechanics.module;
 
 import com.destroystokyo.paper.MaterialTags;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.ItemUtil;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.damage.DamageSource;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -91,9 +97,15 @@ public class ModuleShieldDamageReduction extends OCMModule {
 
         // Blocking is calculated after base and hard hat, and before armour etc.
         final double baseDamage = e.getDamage(DamageModifier.BASE) + e.getDamage(DamageModifier.HARD_HAT);
+
+        // Ensures that damage is reduced when players block with swords on
+        // 1.21.3/1.21.4 servers, especially for 1.8 clients
+        if (ItemUtil.isConsumableSword(player.getActiveItem()) && isDamageSourceBlocked(player, e))
+            e.setDamage(DamageModifier.BLOCKING, -0.0001);
+
         if (!shieldBlockedDamage(baseDamage, e.getDamage(DamageModifier.BLOCKING))) return;
 
-        if (swordsOnly && !isBlockingWithSwordOrModuleShield(player)) return;
+        if (swordsOnly && !isHoldingSwordOrModuleShield(player)) return;
 
         final double damageReduction = getDamageReduction(baseDamage, e.getCause());
         e.setDamage(DamageModifier.BLOCKING, -damageReduction);
@@ -117,7 +129,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         }
     }
 
-    private boolean isBlockingWithSwordOrModuleShield(Player player) {
+    private boolean isHoldingSwordOrModuleShield(Player player) {
         if (!player.isBlocking()) return false;
 
         ItemStack iStack = player.getActiveItem();
@@ -150,6 +162,45 @@ public class ModuleShieldDamageReduction extends OCMModule {
         // Only reduce damage if they were hit head on, i.e. the shield blocked some of the damage
         // This also takes into account damages that are not blocked by shields
         return attackDamage > 0 && blockingReduction < 0;
+    }
+
+    private boolean isBypassingShield(EntityDamageByEntityEvent event) {
+        org.bukkit.damage.DamageType damageType = event.getDamageSource().getDamageType();
+        return org.bukkit.tag.DamageTypeTags.BYPASSES_SHIELD.isTagged(damageType);
+    }
+
+    private boolean isDamageSourceBlocked(Player player, EntityDamageByEntityEvent event) {
+        Entity damager = event.getDamager();
+        boolean flag = damager instanceof AbstractArrow entityarrow && entityarrow.getPierceLevel() > 0;
+
+        if (!isBypassingShield(event) && player.isBlocking() && !flag) {
+            DamageSource damageSource = event.getDamageSource();
+            Location srcLoc = damageSource.getSourceLocation();
+
+            if (srcLoc != null) {
+                Vec3 sourcePosition = new Vec3(srcLoc.getX(), srcLoc.getY(), srcLoc.getZ());
+                Location playerLoc = player.getLocation();
+
+                Vec3 vec3 = this.calculateViewVector(playerLoc.getYaw());
+                Vec3 vec31 = sourcePosition.vectorTo(new Vec3(playerLoc.getX(), playerLoc.getY(), playerLoc.getZ()));
+                vec31 = new Vec3(vec31.x, 0.0, vec31.z).normalize();
+
+                // Checks if the damage comes from in front of a player blocking with a shield
+                return vec31.dot(vec3) < 0.0;
+            }
+        }
+
+        return false;
+    }
+
+    private Vec3 calculateViewVector(float yaw) {
+        float f2 = (float) 0.0 * ((float)Math.PI / 180F);
+        float f3 = -yaw * ((float)Math.PI / 180F);
+        float f4 = Mth.cos(f3);
+        float f5 = Mth.sin(f3);
+        float f6 = Mth.cos(f2);
+        float f7 = Mth.sin(f2);
+        return new Vec3(f5 * f6, -f7, f4 * f6);
     }
 
     public static Map<UUID, List<ItemStack>> getFullyBlocked() {

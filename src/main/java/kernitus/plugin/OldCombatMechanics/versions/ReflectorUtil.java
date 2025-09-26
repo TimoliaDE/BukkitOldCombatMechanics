@@ -1,10 +1,11 @@
 package kernitus.plugin.OldCombatMechanics.versions;
 
 import io.papermc.paper.configuration.WorldConfiguration;
-import io.papermc.paper.datacomponent.item.BlocksAttacks;
-import io.papermc.paper.datacomponent.item.PaperBlocksAttacks;
+import io.papermc.paper.datacomponent.item.*;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.VersionCompatUtils;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.type.ClassType;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -132,7 +133,7 @@ public class ReflectorUtil {
     }
 
     public static Object getAsNmsCopy(ItemStack iStack) {
-        Class<?> classItemStack = Reflector.getClass("org.bukkit.craftbukkit.inventory.CraftItemStack");
+        Class<?> classItemStack = Reflector.getClass(ClassType.CRAFTBUKKIT, "inventory.CraftItemStack");
         Method nmsCopyMethod = Reflector.getMethod(classItemStack, "asNMSCopy", 1, ItemStack.class);
         return Reflector.invokeMethod(nmsCopyMethod, null, iStack);
     }
@@ -155,19 +156,39 @@ public class ReflectorUtil {
     }
 
     public static Object getNmsItemStack(ItemStack iStack) {
-        return Reflector.getFieldValue(Reflector.getField(iStack.getClass(), "handle"), iStack);
+        Class<?> classItemStack = Reflector.getClass(ClassType.CRAFTBUKKIT, "inventory.CraftItemStack");
+        Method nmsCopyMethod = Reflector.getMethod(classItemStack, "unwrap", 1, ItemStack.class);
+        return Reflector.invokeMethod(nmsCopyMethod, null, iStack);
     }
 
-    public static boolean hasBlocksAttacks(@Nullable ItemStack iStack) {
+    private static boolean hasDataComponent(@Nullable ItemStack iStack, DataComponentType<?> dataComponent,
+                                            String dataComponentName) {
         if (iStack == null)
             return false;
 
         if (isLatestVersionedPackage())
-            return CraftItemStack.unwrap(iStack).has(DataComponents.BLOCKS_ATTACKS);
+            return CraftItemStack.unwrap(iStack).has(dataComponent);
 
         Object nmsStack = getNmsItemStack(iStack);
         Method method = Reflector.getMethod(nmsStack.getClass(), "has", 1);
-        return Reflector.invokeMethod(method, nmsStack, getComponentBlocksAttacks());
+        DataComponentType<?> givenDataComponent = getDataComponent(dataComponentName);
+        return Reflector.invokeMethod(method, nmsStack, givenDataComponent);
+    }
+
+    public static boolean hasBlocksAttacks(@Nullable ItemStack iStack) {
+        return hasDataComponent(iStack, DataComponents.BLOCKS_ATTACKS, "BLOCKS_ATTACKS");
+    }
+
+    public static boolean hasConsumable(@Nullable ItemStack iStack) {
+        return hasDataComponent(iStack, DataComponents.CONSUMABLE, "CONSUMABLE");
+    }
+
+    private static void setDataComponent(ItemStack iStack, @Nullable Object paperComponent, String dataComponentName) {
+        Object nmsStack = getNmsItemStack(iStack);
+        Method method = Reflector.getMethod(nmsStack.getClass(), "set", 2);
+        Object nmsComponent = paperComponent != null ? VersionCompatUtils.getCraftHandle(paperComponent) : null;
+        DataComponentType<?> givenDataComponent = getDataComponent(dataComponentName);
+        Reflector.invokeMethod(method, nmsStack, givenDataComponent, nmsComponent);
     }
 
     public static void setBlocksAttacks(ItemStack iStack, @Nullable BlocksAttacks blocksAttacks) {
@@ -178,14 +199,18 @@ public class ReflectorUtil {
             return;
         }
 
-        Object nmsStack = getNmsItemStack(iStack);
-        Method method = Reflector.getMethod(nmsStack.getClass(), "set", 2);
-        Object nmsBlocksAttacks = blocksAttacks != null ? VersionCompatUtils.getCraftHandle(blocksAttacks) : null;
-        Reflector.invokeMethod(method, nmsStack, getComponentBlocksAttacks(), nmsBlocksAttacks);
+        setDataComponent(iStack, blocksAttacks, "BLOCKS_ATTACKS");
     }
 
-    private static Object getComponentBlocksAttacks() {
-        return net.minecraft.core.component.DataComponents.BLOCKS_ATTACKS;
+    public static void setConsumable(ItemStack iStack, @Nullable Consumable consumable) {
+        if (isLatestVersionedPackage()) {
+            net.minecraft.world.item.component.Consumable nmsConsumable = consumable != null ?
+                    ((PaperConsumable) consumable).getHandle() : null;
+            CraftItemStack.unwrap(iStack).set(DataComponents.CONSUMABLE, nmsConsumable);
+            return;
+        }
+
+        setDataComponent(iStack, consumable, "CONSUMABLE");
     }
 
     public static FoodData getFoodData(Player player) {
@@ -200,5 +225,17 @@ public class ReflectorUtil {
         String name = foodData.get(ver);
         Object nmsPlayer = VersionCompatUtils.getCraftHandle(player);
         return Reflector.invokeMethod(Reflector.getMethod(nmsPlayer.getClass(), name), nmsPlayer);
+    }
+
+    /*
+     * The static fields of net.minecraft.core.component.DataComponents can mismatch
+     * between compile time and runtime across different minecraft versions
+     * (e.g. "DataComponent.FOOD" at compile time corresponds to
+     * "DataComponent.INTANGIBLE_PROJECTILE" at runtime for 1.21.4 minecraft servers).
+     * Therefore, reflection is used.
+     */
+    private static DataComponentType<?> getDataComponent(String name) {
+        Class<?> dataComponentsClass = Reflector.getClass("net.minecraft.core.component.DataComponents");
+        return Reflector.getFieldValue(Reflector.getField(dataComponentsClass, name), null);
     }
 }
