@@ -83,7 +83,7 @@ public class ModuleSwordBlocking extends OCMModule {
 
         if (player == null || !isEnabled(player)) return;
 
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -100,13 +100,13 @@ public class ModuleSwordBlocking extends OCMModule {
 
         boolean usingHand = e.getHand() == EquipmentSlot.HAND;
 
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             PlayerInventory inv = player.getInventory();
             ItemStack mainhandItem = inv.getItemInMainHand();
 
             // Ensures that the offhand shield is priorizied when using a blocking sword
             // in the mainhand
-            if (hasShieldNoCooldown(player) && usingHand && ItemUtil.hasBlockHit(mainhandItem)) {
+            if (hasShieldNoCooldown(player) && usingHand && ItemUtil.isBlockingWithSword(mainhandItem)) {
                 removeBlockAttributesFromHoldingSword(player);
                 e.setCancelled(true);
                 Bukkit.getScheduler().runTask(plugin, () -> player.startUsingItem(EquipmentSlot.OFF_HAND));
@@ -162,7 +162,7 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler
     public void onHotBarChange(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -173,7 +173,7 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -184,7 +184,7 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerLogout(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -195,7 +195,7 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
         final Player player = event.getEntity();
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -216,7 +216,7 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
         final Player player = event.getPlayer();
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -227,17 +227,20 @@ public class ModuleSwordBlocking extends OCMModule {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent e) {
-        if (!(e.getWhoClicked() instanceof Player)) {
-            return;
-        }
-        final Player player = (Player) e.getWhoClicked();
-        if (areItemsStored(player.getUniqueId())) {
-            final ItemStack cursor = e.getCursor();
-            final ItemStack current = e.getCurrentItem();
-            if (cursor != null && cursor.getType() == Material.SHIELD ||
-                    current != null && current.getType() == Material.SHIELD) {
-                e.setCancelled(true);
-                restore(player, true);
+        if (e.getWhoClicked() instanceof Player player) {
+            if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
+                giveBlockAttributesToSwords(player);
+                return;
+            }
+
+            if (areItemsStored(player.getUniqueId())) {
+                final ItemStack cursor = e.getCursor();
+                final ItemStack current = e.getCurrentItem();
+                if (cursor.getType() == Material.SHIELD || current != null &&
+                        current.getType() == Material.SHIELD) {
+                    e.setCancelled(true);
+                    restore(player, true);
+                }
             }
         }
     }
@@ -247,7 +250,7 @@ public class ModuleSwordBlocking extends OCMModule {
         final Item is = event.getItemDrop();
         final Player player = event.getPlayer();
 
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
         }
@@ -263,7 +266,7 @@ public class ModuleSwordBlocking extends OCMModule {
     }
 
     private void restore(Player p, boolean force) {
-        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(p);
             return;
         }
@@ -337,7 +340,7 @@ public class ModuleSwordBlocking extends OCMModule {
             ItemStack iStack = inv.getItem(i);
             if (iStack == null) continue;
 
-            if (MaterialTags.SWORDS.isTagged(iStack) && !ItemUtil.hasBlockHit(iStack)) {
+            if (MaterialTags.SWORDS.isTagged(iStack) && !ItemUtil.isBlockingWithSword(iStack)) {
                 ItemUtil.addWeaponAttributes(iStack);
                 inv.setItem(i, iStack);
                 updatedSwords = true;
@@ -352,7 +355,7 @@ public class ModuleSwordBlocking extends OCMModule {
         PlayerInventory inv = player.getInventory();
         ItemStack mainItem = inv.getItemInMainHand();
 
-        if (ItemUtil.hasBlockHit(mainItem)) {
+        if (ItemUtil.isBlockingWithSword(mainItem)) {
             ItemUtil.removeWeaponAttributes(mainItem);
             inv.setItem(EquipmentSlot.HAND, mainItem);
         }
