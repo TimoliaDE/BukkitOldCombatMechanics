@@ -2,6 +2,7 @@ package kernitus.plugin.OldCombatMechanics.module;
 
 import com.cryptomorin.xseries.XAttribute;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.Bukkit;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -15,22 +16,31 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 
 import javax.annotation.Nullable;
 
-public class ModuleOldFallDamage extends OCMModule {
+/*
+ * This matches the old attack range (3.1125 blocks) in 1.8 pvp.
+ * Only supported in version 1.20.5 or later.
+ * When enabled, this applies to 1.8 clients and 1.20.5+ clients only.
+ * However, 1.9–1.20.4 clients still have the new attack range
+ * (3.0 blocks) due to technical limitations.
+ */
+public class ModuleOldAttackRange extends OCMModule {
 
-    private double safeFallDistance;
+    private double entityInteractionRange;
 
-    public ModuleOldFallDamage(OCMMain plugin) {
-        super(plugin, "old-fall-damage");
+    public ModuleOldAttackRange(OCMMain plugin) {
+        super(plugin, "old-attack-range");
         reload();
     }
 
     @Override
     public void reload() {
-        safeFallDistance = module().getDouble("safeFallDistance", 2.834627);
-        Bukkit.getOnlinePlayers().forEach(this::adjustSafeFallDistance);
+        entityInteractionRange = module().getDouble("entityInteractionRange", 3.1125);
+        Bukkit.getOnlinePlayers().forEach(this::adjustEntityInteractionRange);
     }
 
-    private void adjustSafeFallDistance(Player player) {
+    private void adjustEntityInteractionRange(Player player) {
+        if (!Reflector.versionIsNewerOrEqualTo(1, 20, 5)) return;
+
         if (isEnabled(player)) {
             changeAttribute(player);
         } else
@@ -39,11 +49,11 @@ public class ModuleOldFallDamage extends OCMModule {
 
     @Override
     public void onModesetChange(Player player) {
-        adjustSafeFallDistance(player);
+        adjustEntityInteractionRange(player);
     }
 
     private void changeAttribute(Player player) {
-        setAttributeValue(player, safeFallDistance);
+        setAttributeValue(player, entityInteractionRange);
     }
 
     private void resetAttribute(Player player) {
@@ -51,7 +61,7 @@ public class ModuleOldFallDamage extends OCMModule {
     }
 
     private void setAttributeValue(Player player, @Nullable Double value) {
-        Attribute attributeName = XAttribute.SAFE_FALL_DISTANCE.get();
+        Attribute attributeName = XAttribute.ENTITY_INTERACTION_RANGE.get();
         if (attributeName == null) return;
 
         final AttributeInstance attribute = player.getAttribute(attributeName);
@@ -67,7 +77,7 @@ public class ModuleOldFallDamage extends OCMModule {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
 
-        adjustSafeFallDistance(player);
+        adjustEntityInteractionRange(player);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -75,7 +85,7 @@ public class ModuleOldFallDamage extends OCMModule {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
 
-        adjustSafeFallDistance(player);
+        adjustEntityInteractionRange(player);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -83,11 +93,11 @@ public class ModuleOldFallDamage extends OCMModule {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
 
-        adjustSafeFallDistance(player);
+        adjustEntityInteractionRange(player);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerQuitEvent(PlayerQuitEvent event) {
-        adjustSafeFallDistance(event.getPlayer());
+        adjustEntityInteractionRange(event.getPlayer());
     }
 }

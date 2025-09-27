@@ -248,6 +248,7 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleFixBowShoot(this));
         ModuleLoader.addModule(new ModuleOldFallDamage(this));
         ModuleLoader.addModule(new ModuleOldWaterPlacement(this));
+        ModuleLoader.addModule(new ModuleOldAttackRange(this));
         ModuleLoader.addModule(new ModulePlayerRegen(this));
 
         ModuleLoader.addModule(new ModuleDisableCrafting(this));
