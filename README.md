@@ -23,5 +23,6 @@ In addition, the default values for the following config options have been adjus
 - `shield-damage-reduction`
 - `old-player-knockback`
 - `old-player-regen`
+- `projectile-knockback`
 
 This plugin requires Java 21 and supports the Minecraft Java versions 1.20.2–1.21.8.

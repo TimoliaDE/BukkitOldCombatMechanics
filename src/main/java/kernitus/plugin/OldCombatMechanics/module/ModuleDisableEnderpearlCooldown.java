@@ -5,8 +5,10 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
+import io.papermc.paper.event.player.PlayerItemCooldownEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.EnderPearl;
@@ -56,8 +58,21 @@ public class ModuleDisableEnderpearlCooldown extends OCMModule {
         return INSTANCE;
     }
 
+    // Prefer this event over ProjectileLaunchEvent, as it matches the
+    // enderpearl movement closer to version 1.8
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPlayerItemCooldown(PlayerItemCooldownEvent event) {
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+        if (!Reflector.versionIsNewerOrEqualTo(1, 16, 4)) return;
+
+        if (event.getType() == Material.ENDER_PEARL)
+            event.setCancelled(true);
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerShoot(ProjectileLaunchEvent e) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 16, 4)) return;
         if (e.isCancelled()) return; // For compatibility with other plugins
 
         final Projectile projectile = e.getEntity();

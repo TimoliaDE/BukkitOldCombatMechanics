@@ -60,12 +60,18 @@ public class ModuleOldBowDamage extends OCMModule {
         }
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    /*
+     * The EntityDamageByEntityEvent handlers are assigned priorities so that
+     * they are executed in the following order:
+     * 1. ModuleOldBowDamage
+     * 2. ModuleOldArmourDurability
+     * 3. ModuleShieldDamageReduction
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (!(event.getDamager() instanceof Projectile proj)) return;
         if (!(proj.getShooter() instanceof Player player)) return;
         if (!isEnabled(player)) return;
-        if (event.isCancelled()) return;
 
         if (proj instanceof AbstractArrow abstractArrow && !(proj instanceof Trident)) {
             boolean fromBow;
