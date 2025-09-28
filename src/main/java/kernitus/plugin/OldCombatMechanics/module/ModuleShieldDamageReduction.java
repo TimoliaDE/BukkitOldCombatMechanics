@@ -85,7 +85,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         }
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onHit(EntityDamageByEntityEvent e) {
         final Entity entity = e.getEntity();
 
@@ -101,7 +101,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         // Ensures that damage is reduced when players block with swords on
         // 1.21.3/1.21.4 servers, especially for 1.8 clients
         if (ItemUtil.isConsumableSword(player.getActiveItem()) && isDamageSourceBlocked(player, e))
-            e.setDamage(DamageModifier.BLOCKING, -0.0001);
+            e.setDamage(DamageModifier.BLOCKING, -0.000001);
 
         if (!shieldBlockedDamage(baseDamage, e.getDamage(DamageModifier.BLOCKING))) return;
 

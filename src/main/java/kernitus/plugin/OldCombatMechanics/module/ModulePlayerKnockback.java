@@ -176,7 +176,7 @@ public class ModulePlayerKnockback extends OCMModule {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         final Entity damager = event.getDamager();
         if (!(damager instanceof LivingEntity) && !(damager instanceof Projectile))
@@ -199,6 +199,10 @@ public class ModulePlayerKnockback extends OCMModule {
             event.setCancelled(true);
             return;
         }
+
+        // Prevent the player from receiving knockback when using an ender pearl
+        if (damager instanceof EnderPearl enderPearl && damagee.equals(enderPearl.getShooter()))
+            return;
 
         boolean useBlockHit = false;
 
@@ -262,14 +266,13 @@ public class ModulePlayerKnockback extends OCMModule {
         if (attribute != null) {
             double value = attribute.getValue();
             // Some plugins make entities immune to knockback by setting their knockback resistance
-            // to a high value. Therefore, this effect only applies if the value is 100 or above:
-            if (value < 100)
+            // to a high base value. Therefore, this effect only applies if the base value is 100 or above:
+            if (value >= 1 && attribute.getBaseValue() >= 100)
                 return;
 
             // Allow netherite to affect the horizontal knockback. Each piece of armour
             // yields 10% resistance
             resistanceFactor = Math.max(0, 1 - value);
-
 
             if (usingCoincidence)
                 hasBaseKnockback = new Random().nextDouble() < resistanceFactor;
@@ -304,7 +307,7 @@ public class ModulePlayerKnockback extends OCMModule {
                 if (bonusKnockback > 0) { // Apply bonus knockback
                     playerVelocity.add(new Vector((-Math.sin(attacker.getLocation().getYaw() * 3.1415927F / 180.0F) *
                             (float) bonusKnockback * knockbackExtraMeleeHorizontal), knockbackExtraMeleeVertical,
-                            Math.cos(attacker.getLocation().getYaw() * 3.1415927F / 180.0F) * (float) 
+                            Math.cos(attacker.getLocation().getYaw() * 3.1415927F / 180.0F) * (float)
                                     bonusKnockback * knockbackExtraMeleeHorizontal));
                 }
             }
@@ -332,17 +335,16 @@ public class ModulePlayerKnockback extends OCMModule {
             playerVelocity.multiply(new Vector(resistanceFactor, 1, resistanceFactor));
 
         final UUID victimId = damagee.getUniqueId();
-        boolean fromPlayer = damager instanceof Player || damager instanceof Projectile proj &&
-                proj.getShooter() instanceof Player;
+        Entity damagerSource = damager instanceof Projectile damagerProj &&
+                damagerProj.getShooter() instanceof Player player ? player : damager;
+        boolean fromPlayer = damagerSource instanceof Player;
 
         if (!fromPlayer) {
             handleBlockHit(damager, victimId, useBlockHit, false);
             return;
-        }
 
-        Entity damagerSource = damager instanceof Projectile damagerProj &&
-                damagerProj.getShooter() instanceof Player player ? player : damager;
-        if (damagerSource instanceof Player player && !isEnabled(player)) return;
+        } else if (!isEnabled(damagerSource))
+            return;
 
         // Knockback is sent immediately in 1.8+, there is no reason to send packets
         // manually
