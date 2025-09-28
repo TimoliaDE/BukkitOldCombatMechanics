@@ -41,7 +41,7 @@ public class ModuleOldArmourStrength extends OCMModule {
     }
 
     @SuppressWarnings("deprecation")
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onEntityDamage(EntityDamageEvent e) {
         // 1.8 NMS: Damage = (damage after blocking * (25 - total armour strength)) / 25
         if (!(e.getEntity() instanceof LivingEntity)) return;

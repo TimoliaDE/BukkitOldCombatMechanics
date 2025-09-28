@@ -39,6 +39,7 @@ modesets:
     - "old-fall-damage"
     - "old-water-placement"
     - "old-attack-range"
+    - "projectile-knockback"
 
 worlds:
   # These are the modesets available in each world.
@@ -209,8 +210,8 @@ old-player-knockback:
   # other entities.
   # It does not affect the knockback dealt by mobs other than players.
   # Default values are as in 1.8.
-  # If enabled, entities remain immune to knockback if their knockback resistance
-  # value is 100 or above.
+  # If enabled, entities remain immune to knockback when their
+  # knockback resistance attribute base value is 100 or higher.
   #
   # Minigame servers use higher vertical knockback and lower horizontal knockback, exact values are unknown.
   enabled: true
@@ -334,6 +335,9 @@ projectile-knockback:
     snowball: 0.0001
     egg: 0.0001
     ender_pearl: 0.0001
+  # If enabled, the knockback and/or damage will not apply when
+  # blocked by a vanilla shield
+  noDamageWhenBlocking: true
 
 # ########################
 # GAPPLES & POTIONS

@@ -3,6 +3,7 @@ package kernitus.plugin.OldCombatMechanics.utilities;
 import com.destroystokyo.paper.MaterialTags;
 import io.papermc.paper.datacomponent.item.Consumable;
 import io.papermc.paper.datacomponent.item.blocksattacks.DamageReduction;
+import io.papermc.paper.datacomponent.item.blocksattacks.ItemDamageFunction;
 import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
@@ -33,6 +34,11 @@ public class ItemUtil {
             DamageReduction damageReduction = builder.horizontalBlockingAngle(90).type(null)
                     .base(0).factor(0.0001F).build();
 
+            // The ItemDamageFunction ensures that the sword does not lose any durability, just as in 1.8
+            ItemDamageFunction.Builder damageBuilder = ItemDamageFunction.itemDamageFunction();
+            ItemDamageFunction damageFunction = damageBuilder.threshold(Float.MAX_VALUE)
+                    .base(0).factor(0).build();
+
             io.papermc.paper.datacomponent.item.BlocksAttacks blocksAttacks =
                     io.papermc.paper.datacomponent.item.BlocksAttacks.blocksAttacks()
                             .blockDelaySeconds(0)
@@ -40,7 +46,8 @@ public class ItemUtil {
                             .addDamageReduction(damageReduction)
                             .bypassedBy(null)
                             .blockSound(null)
-                            .disableSound(null).build();
+                            .disableSound(null)
+                            .itemDamage(damageFunction).build();
 
             ReflectorUtil.setBlocksAttacks(iStack, blocksAttacks);
             return;
