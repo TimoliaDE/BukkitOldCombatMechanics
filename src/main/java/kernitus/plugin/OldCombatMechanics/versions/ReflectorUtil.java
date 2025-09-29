@@ -175,10 +175,6 @@ public class ReflectorUtil {
         return Reflector.invokeMethod(method, nmsStack, givenDataComponent);
     }
 
-    public static boolean hasBlocksAttacks(@Nullable ItemStack iStack) {
-        return hasDataComponent(iStack, DataComponents.BLOCKS_ATTACKS, "BLOCKS_ATTACKS");
-    }
-
     public static boolean hasConsumable(@Nullable ItemStack iStack) {
         return hasDataComponent(iStack, DataComponents.CONSUMABLE, "CONSUMABLE");
     }
@@ -189,17 +185,6 @@ public class ReflectorUtil {
         Object nmsComponent = paperComponent != null ? VersionCompatUtils.getCraftHandle(paperComponent) : null;
         DataComponentType<?> givenDataComponent = getDataComponent(dataComponentName);
         Reflector.invokeMethod(method, nmsStack, givenDataComponent, nmsComponent);
-    }
-
-    public static void setBlocksAttacks(ItemStack iStack, @Nullable BlocksAttacks blocksAttacks) {
-        if (isLatestVersionedPackage()) {
-            net.minecraft.world.item.component.BlocksAttacks nmsBlocksAttacks = blocksAttacks != null ?
-                    ((PaperBlocksAttacks) blocksAttacks).getHandle() : null;
-            CraftItemStack.unwrap(iStack).set(DataComponents.BLOCKS_ATTACKS, nmsBlocksAttacks);
-            return;
-        }
-
-        setDataComponent(iStack, blocksAttacks, "BLOCKS_ATTACKS");
     }
 
     public static void setConsumable(ItemStack iStack, @Nullable Consumable consumable) {
