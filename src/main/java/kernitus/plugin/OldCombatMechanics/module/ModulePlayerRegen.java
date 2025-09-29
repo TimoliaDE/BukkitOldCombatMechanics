@@ -1,5 +1,6 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
+import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.versions.ReflectorUtil;
@@ -15,7 +16,6 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.tag.DamageTypeTags;
 import org.spigotmc.SpigotWorldConfig;
 
@@ -82,7 +82,7 @@ public class ModulePlayerRegen extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onPlayerRespawn(PlayerRespawnEvent event) {
+    public void onPlayerPostRespawn(PlayerPostRespawnEvent event) {
         adjustSaturatedRegenRate(event.getPlayer());
     }
 
@@ -91,10 +91,8 @@ public class ModulePlayerRegen extends OCMModule {
         adjustSaturatedRegenRate(event.getPlayer());
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityExhaustion(EntityExhaustionEvent event) {
-        if (event.isCancelled()) return;
-
         if (!(event.getEntity() instanceof Player player)) return;
         if (!isEnabled(player)) return;
 
@@ -143,10 +141,8 @@ public class ModulePlayerRegen extends OCMModule {
         return 0.3F;
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityRegainHealth(EntityRegainHealthEvent event) {
-        if (event.isCancelled()) return;
-
         Entity entity = event.getEntity();
         if (!(entity instanceof Player player)) return;
         if (!isEnabled(player)) return;
