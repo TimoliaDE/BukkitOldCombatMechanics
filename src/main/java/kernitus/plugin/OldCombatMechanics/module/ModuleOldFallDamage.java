@@ -1,6 +1,7 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import com.cryptomorin.xseries.XAttribute;
+import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import org.bukkit.Bukkit;
 import org.bukkit.attribute.Attribute;
@@ -11,7 +12,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
 
 import javax.annotation.Nullable;
 
@@ -79,7 +79,7 @@ public class ModuleOldFallDamage extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPlayerRespawn(PlayerRespawnEvent event) {
+    public void onPlayerPostRespawn(PlayerPostRespawnEvent event) {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
 

@@ -5,7 +5,6 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
-import com.destroystokyo.paper.MaterialTags;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.ItemUtil;
 import net.minecraft.util.Mth;
@@ -16,6 +15,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.damage.DamageSource;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -38,7 +38,9 @@ public class ModuleShieldDamageReduction extends OCMModule {
 
     private int genericDamageReductionAmount, genericDamageReductionPercentage,
             projectileDamageReductionAmount, projectileDamageReductionPercentage;
-    private boolean swordsOnly;
+    private boolean noShields;
+    private boolean noDamageSnowballs;
+
     private final static Map<UUID, List<ItemStack>> fullyBlocked = new WeakHashMap<>();
     private final static Set<UUID> blockedPlayers = new HashSet<>();
 
@@ -54,7 +56,8 @@ public class ModuleShieldDamageReduction extends OCMModule {
         genericDamageReductionPercentage = module().getInt("generalDamageReductionPercentage", 50);
         projectileDamageReductionAmount = module().getInt("projectileDamageReductionAmount", 1);
         projectileDamageReductionPercentage = module().getInt("projectileDamageReductionPercentage", 50);
-        swordsOnly = module().getBoolean("swordsOnly", true);
+        noShields = module().getBoolean("noShields", true);
+        noDamageSnowballs = module().getBoolean("noSnowballs", true);
     }
 
     @EventHandler
@@ -86,29 +89,37 @@ public class ModuleShieldDamageReduction extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onHit(EntityDamageByEntityEvent e) {
-        final Entity entity = e.getEntity();
-
-        if (!(entity instanceof Player)) return;
-
-        final Player player = (Player) entity;
-
-        if (!isEnabled(e.getDamager(), player)) return;
+    public void onHit(EntityDamageByEntityEvent event) {
+        final Entity damager = event.getDamager();
+        final Entity entity = event.getEntity();
+        if (!(entity instanceof Player player) || !isEnabled(damager, player)) return;
 
         // Blocking is calculated after base and hard hat, and before armour etc.
-        final double baseDamage = e.getDamage(DamageModifier.BASE) + e.getDamage(DamageModifier.HARD_HAT);
+        final double baseDamage = event.getDamage(DamageModifier.BASE) + event.getDamage(DamageModifier.HARD_HAT);
 
-        // Ensures that damage is reduced when players block with swords on
+        // Ensures that damage can be reduced when players block with swords on
         // 1.21.3/1.21.4 servers, especially for 1.8 clients
-        if (ItemUtil.isConsumableSword(player.getActiveItem()) && isDamageSourceBlocked(player, e))
-            e.setDamage(DamageModifier.BLOCKING, -0.000001);
+        if (ItemUtil.isUsingConsumableSword(player) && isDamageSourceBlocked(player, event))
+            event.setDamage(DamageModifier.BLOCKING, -0.00001);
 
-        if (!shieldBlockedDamage(baseDamage, e.getDamage(DamageModifier.BLOCKING))) return;
+        if (!shieldBlockedDamage(baseDamage, event.getDamage(DamageModifier.BLOCKING))) return;
 
-        if (swordsOnly && !isHoldingSwordOrModuleShield(player)) return;
+        final EntityType type = damager.getType();
+        boolean usingVanillaShield = isUsingVanillaShield(player);
+        boolean hasBlockedSnowballs = noDamageSnowballs && usingVanillaShield && event.getDamage() > 0 &&
+                (type == EntityType.SNOWBALL || type == EntityType.EGG || type == EntityType.ENDER_PEARL);
 
-        final double damageReduction = getDamageReduction(baseDamage, e.getCause());
-        e.setDamage(DamageModifier.BLOCKING, -damageReduction);
+        if (hasBlockedSnowballs) {
+            event.setDamage(0);
+            return;
+        }
+
+        if (noShields && usingVanillaShield) return;
+
+        final double damageReduction = hasBlockedSnowballs ? 1_000_000 :
+                getDamageReduction(baseDamage, event.getCause());
+
+        event.setDamage(DamageModifier.BLOCKING, -damageReduction);
         final double currentDamage = baseDamage - damageReduction;
 
         debug("Blocking: " + baseDamage + " - " + damageReduction + " = " + currentDamage, player);
@@ -129,15 +140,16 @@ public class ModuleShieldDamageReduction extends OCMModule {
         }
     }
 
-    private boolean isHoldingSwordOrModuleShield(Player player) {
-        if (!player.isBlocking()) return false;
-
+    private static boolean isHoldingVanillaShield(Player player) {
         ItemStack iStack = player.getActiveItem();
         ItemMeta iMeta = iStack.getItemMeta();
-        Material type = iStack.getType();
+        boolean isNotModuleShield = iMeta == null ||
+                !iMeta.getPersistentDataContainer().has(ModuleSwordBlocking.KEY, PersistentDataType.STRING);
+        return iStack.getType() == Material.SHIELD && isNotModuleShield;
+    }
 
-        return MaterialTags.SWORDS.isTagged(type) || iMeta != null &&
-                iMeta.getPersistentDataContainer().has(ModuleSwordBlocking.KEY, PersistentDataType.STRING);
+    private static boolean isUsingVanillaShield(Player player) {
+        return player.isBlocking() && isHoldingVanillaShield(player);
     }
 
     private double getDamageReduction(double damage, DamageCause damageCause) {
@@ -173,7 +185,9 @@ public class ModuleShieldDamageReduction extends OCMModule {
         Entity damager = event.getDamager();
         boolean flag = damager instanceof AbstractArrow entityarrow && entityarrow.getPierceLevel() > 0;
 
-        if (!isBypassingShield(event) && player.isBlocking() && !flag) {
+        // The player.isBlocking() has been removed in the if-condition,
+        // so the damage reduction can also apply for the versions 1.21.5 and above
+        if (!isBypassingShield(event) && !flag) {
             DamageSource damageSource = event.getDamageSource();
             Location srcLoc = damageSource.getSourceLocation();
 

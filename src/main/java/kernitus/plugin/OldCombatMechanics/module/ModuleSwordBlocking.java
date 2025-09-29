@@ -101,12 +101,9 @@ public class ModuleSwordBlocking extends OCMModule {
         boolean usingHand = e.getHand() == EquipmentSlot.HAND;
 
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
-            PlayerInventory inv = player.getInventory();
-            ItemStack mainhandItem = inv.getItemInMainHand();
-
             // Ensures that the offhand shield is priorizied when using a blocking sword
             // in the mainhand
-            if (hasShieldNoCooldown(player) && usingHand && ItemUtil.isBlockingWithSword(mainhandItem)) {
+            if (hasShieldNoCooldown(player) && usingHand && ItemUtil.isHoldingConsumableSword(player, false)) {
                 removeBlockAttributesFromHoldingSword(player);
                 e.setCancelled(true);
                 Bukkit.getScheduler().runTask(plugin, () -> player.startUsingItem(EquipmentSlot.OFF_HAND));
@@ -340,7 +337,7 @@ public class ModuleSwordBlocking extends OCMModule {
             ItemStack iStack = inv.getItem(i);
             if (iStack == null) continue;
 
-            if (MaterialTags.SWORDS.isTagged(iStack) && !ItemUtil.isBlockingWithSword(iStack)) {
+            if (MaterialTags.SWORDS.isTagged(iStack) && !ItemUtil.isConsumableSword(iStack)) {
                 ItemUtil.addWeaponAttributes(iStack);
                 inv.setItem(i, iStack);
                 updatedSwords = true;
@@ -355,7 +352,7 @@ public class ModuleSwordBlocking extends OCMModule {
         PlayerInventory inv = player.getInventory();
         ItemStack mainItem = inv.getItemInMainHand();
 
-        if (ItemUtil.isBlockingWithSword(mainItem)) {
+        if (ItemUtil.isHoldingConsumableSword(player, false)) {
             ItemUtil.removeWeaponAttributes(mainItem);
             inv.setItem(EquipmentSlot.HAND, mainItem);
         }

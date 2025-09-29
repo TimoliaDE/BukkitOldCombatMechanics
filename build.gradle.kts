@@ -60,12 +60,18 @@ tasks {
     reobfJar {
         doLast {
             val buildLibs = layout.buildDirectory.dir("libs").get().asFile
+            val reobfFile = buildLibs.listFiles()
+                ?.firstOrNull { it.name.endsWith("-reobf.jar") }
+                ?: throw GradleException("No reobf jar found in $buildLibs")
+
+            // Delete all JAR files from "build/libs" except the -reobf.jar file
             buildLibs.listFiles()?.forEach { file ->
-                if (file.name.endsWith(".jar") && file.name != outputs.files.singleFile.name) {
+                if (file.name.endsWith(".jar") && file != reobfFile) {
                     file.delete()
                 }
             }
-            val reobfFile = outputs.files.singleFile
+
+            // Rename the single -reobf.jar to the final artifact name
             val targetFile = buildLibs.resolve("${project.name}-${project.version}.jar")
             reobfFile.renameTo(targetFile)
         }
