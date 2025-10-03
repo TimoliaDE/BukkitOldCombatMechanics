@@ -71,7 +71,7 @@ public class ModuleOldFallDamage extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPlayerChangeWorld(PlayerChangedWorldEvent event) {
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
 

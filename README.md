@@ -15,14 +15,15 @@ The following options have been added to the config
 - `fix-bow-shoot`
 - `old-fall-damage`
 - `old-water-placement`
-- `old-attack-range`
 
 In addition, the default values for the following config options have been adjusted to better match Minecraft 1.8 PvP mechanics:
 
 - `attack-frequency`
 - `shield-damage-reduction`
 - `old-player-knockback`
+- `old-fishing-knockback`
 - `old-player-regen`
 - `projectile-knockback`
 
 This plugin requires Java 21 and supports the Minecraft Java versions 1.20.2–1.21.8.
+Note: When the jar is built by using gradle, only the jar with the .reobf-Ending will work.

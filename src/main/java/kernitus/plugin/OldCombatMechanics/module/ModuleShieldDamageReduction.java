@@ -7,13 +7,11 @@ package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.ItemUtil;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.projectile.AbstractArrow;
-import net.minecraft.world.phys.Vec3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.damage.DamageSource;
+import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -27,6 +25,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.Vector;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -192,12 +191,13 @@ public class ModuleShieldDamageReduction extends OCMModule {
             Location srcLoc = damageSource.getSourceLocation();
 
             if (srcLoc != null) {
-                Vec3 sourcePosition = new Vec3(srcLoc.getX(), srcLoc.getY(), srcLoc.getZ());
+                Vector sourcePosition = new Vector(srcLoc.getX(), srcLoc.getY(), srcLoc.getZ());
                 Location playerLoc = player.getLocation();
 
-                Vec3 vec3 = this.calculateViewVector(playerLoc.getYaw());
-                Vec3 vec31 = sourcePosition.vectorTo(new Vec3(playerLoc.getX(), playerLoc.getY(), playerLoc.getZ()));
-                vec31 = new Vec3(vec31.x, 0.0, vec31.z).normalize();
+                Vector vec3 = this.calculateViewVector(playerLoc.getYaw());
+                Vector playerVec = new Vector(playerLoc.getX(), playerLoc.getY(), playerLoc.getZ());
+                Vector vec31 = playerVec.subtract(sourcePosition);
+                vec31 = new Vector(vec31.getX(), 0.0, vec31.getZ()).normalize();
 
                 // Checks if the damage comes from in front of a player blocking with a shield
                 return vec31.dot(vec3) < 0.0;
@@ -207,14 +207,14 @@ public class ModuleShieldDamageReduction extends OCMModule {
         return false;
     }
 
-    private Vec3 calculateViewVector(float yaw) {
-        float f2 = (float) 0.0 * ((float)Math.PI / 180F);
-        float f3 = -yaw * ((float)Math.PI / 180F);
-        float f4 = Mth.cos(f3);
-        float f5 = Mth.sin(f3);
-        float f6 = Mth.cos(f2);
-        float f7 = Mth.sin(f2);
-        return new Vec3(f5 * f6, -f7, f4 * f6);
+    private Vector calculateViewVector(float yaw) {
+        float f2 = (float) 0.0 * ((float) Math.PI / 180F);
+        float f3 = -yaw * ((float) Math.PI / 180F);
+        float f4 = (float) Math.cos(f3);
+        float f5 = (float) Math.sin(f3);
+        float f6 = (float) Math.cos(f2);
+        float f7 = (float) Math.sin(f2);
+        return new Vector(f5 * f6, -f7, f4 * f6);
     }
 
     public static Map<UUID, List<ItemStack>> getFullyBlocked() {

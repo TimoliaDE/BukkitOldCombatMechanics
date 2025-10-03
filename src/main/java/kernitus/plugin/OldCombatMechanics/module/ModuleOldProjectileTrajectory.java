@@ -2,81 +2,68 @@ package kernitus.plugin.OldCombatMechanics.module;
 
 import io.papermc.paper.configuration.WorldConfiguration;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.VersionCompatUtils;
 import kernitus.plugin.OldCombatMechanics.versions.ReflectorUtil;
-import net.minecraft.world.phys.Vec3;
-import org.bukkit.Material;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.entity.EntityShootBowEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.util.Vector;
-
-import java.lang.reflect.Method;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 /**
  * This disables the relative projectile velocity. In other words,
- * the projectile will not be affected by the player's movement,
- * such as jumping.
+ * projectiles such as arrows or thrown potions will no longer be
+ * affected by the player's movement, e.g. when jumping.
  */
 public class ModuleOldProjectileTrajectory extends OCMModule {
 
     public ModuleOldProjectileTrajectory(OCMMain plugin) {
         super(plugin, "old-projectile-trajectory");
+        reload();
     }
 
-    // Ensure that this event will be called before the event on the ModuleFixBowShoot event by
-    // changing the EventPriority to HIGH instead of HIGHEST
+    @Override
+    public void reload() {
+        Bukkit.getOnlinePlayers().forEach(this::handleProjectileVelocity);
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
-    public void onEntityShootBow(EntityShootBowEvent event) {
-        final LivingEntity livingEntity = event.getEntity();
-        if (!(livingEntity instanceof Player player)) return;
-        if (!isEnabled(player)) return;
-        if (event.isCancelled()) return;
-
-        if (hasDisableRelativeProjectileVelocity(player.getWorld())) return;
-
-        ItemStack bow = event.getBow();
-        if (bow != null && bow.getType() == Material.BOW)
-            changeMovement(player, event.getProjectile());
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        handleProjectileVelocity(event.getPlayer());
     }
 
-    private void changeMovement(Player player, Entity proj) {
-        Vec3 knownMovement = getMovement(player);
-        double x = knownMovement.x();
-        double y = knownMovement.y();
-        double z = knownMovement.z();
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        World world = player.getWorld();
 
-        if (Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(z)) return;
-
-        boolean onGround = player.isOnGround();
-        Vector vec3 = new Vector(x, onGround ? 0.0 : y, z).multiply(-1);
-        Vector deltaMovement = proj.getVelocity();
-        proj.setVelocity(deltaMovement.add(vec3));
+        if (hasDisabledRelativeProjectileVelocity(world))
+            disableRelativeProjectileVelocity(world);
     }
 
-    private Vec3 getMovement(Entity entity) {
-        if (entity instanceof Player player) {
-            if (ReflectorUtil.isLatestVersionedPackage())
-                return ((CraftPlayer) player).getHandle().getKnownMovement();
-
-            if (Reflector.versionIsNewerOrEqualTo(1, 21, 0)) {
-                Object obj = VersionCompatUtils.getCraftHandle(player);
-                Method method = Reflector.getMethod(obj.getClass(), "getKnownMovement");
-                return Reflector.invokeMethod(method, obj);
-            }
-        }
-
-        Vector vec = entity.getVelocity();
-        return new Vec3(vec.getX(), vec.getY(), vec.getZ());
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        handleProjectileVelocity(event.getPlayer());
     }
 
-    private boolean hasDisableRelativeProjectileVelocity(World world) {
+    private void handleProjectileVelocity(Player player) {
+        handleProjectileVelocity(player.getWorld());
+    }
+
+    private void handleProjectileVelocity(World world) {
+        if (!hasDisabledRelativeProjectileVelocity(world))
+            disableRelativeProjectileVelocity(world);
+    }
+
+    private boolean hasDisabledRelativeProjectileVelocity(World world) {
         WorldConfiguration.Misc misc = ReflectorUtil.getWorldConfigurationMisc(world);
         return misc.disableRelativeProjectileVelocity;
+    }
+
+    private void disableRelativeProjectileVelocity(World world) {
+        WorldConfiguration.Misc misc = ReflectorUtil.getWorldConfigurationMisc(world);
+        misc.disableRelativeProjectileVelocity = true;
     }
 }
