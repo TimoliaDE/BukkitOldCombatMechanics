@@ -17,7 +17,6 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.tag.DamageTypeTags;
-import org.spigotmc.SpigotWorldConfig;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -77,7 +76,7 @@ public class ModulePlayerRegen extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onPlayerChangeWorld(PlayerChangedWorldEvent event) {
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
         adjustSaturatedRegenRate(event.getPlayer());
     }
 
@@ -98,7 +97,10 @@ public class ModulePlayerRegen extends OCMModule {
 
         EntityExhaustionEvent.ExhaustionReason reason = event.getExhaustionReason();
         float exhaustion = event.getExhaustion();
-        SpigotWorldConfig spigotConfig = ReflectorUtil.getSpigotConfig(player.getWorld());
+
+        final float swimMultiplier = 0.01F;
+        final float sprintMultiplier = 0.1F;
+        final float otherMultiplier = 0.0F;
 
         float amount = switch (reason) {
             case BLOCK_MINED -> 0.025F;
@@ -109,10 +111,10 @@ public class ModulePlayerRegen extends OCMModule {
             case UNKNOWN, CROUCH -> 0F;
 
             case SWIM, WALK_UNDERWATER, WALK_ON_WATER ->
-                    quotient(exhaustion, 0.015F, spigotConfig.swimMultiplier);
+                    quotient(exhaustion, 0.015F, swimMultiplier);
 
-            case SPRINT -> quotient(exhaustion, 0.099999994F, spigotConfig.sprintMultiplier);
-            case WALK -> quotient(exhaustion, 0.01F, spigotConfig.otherMultiplier);
+            case SPRINT -> quotient(exhaustion, 0.099999994F, sprintMultiplier);
+            case WALK -> quotient(exhaustion, 0.01F, otherMultiplier);
             case JUMP -> 0.2F;
             case JUMP_SPRINT -> 0.8F;
         };

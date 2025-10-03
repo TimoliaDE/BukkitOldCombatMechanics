@@ -23,10 +23,8 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.spigotmc.SpigotWorldConfig;
 
 import javax.annotation.Nullable;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -119,17 +117,6 @@ public class ReflectorUtil {
         Method methodPaperConfig = Reflector.getMethod(nmsWorld.getClass(), "paperConfig", 0);
         WorldConfiguration config = Reflector.invokeMethod(methodPaperConfig, nmsWorld);
         return config.misc;
-    }
-
-    public static SpigotWorldConfig getSpigotConfig(World world) {
-        if (isLatestVersionedPackage()) {
-            ServerLevel nmsWorld = ((CraftWorld) world).getHandle();
-            return nmsWorld.spigotConfig;
-        }
-
-        Object nmsWorld = VersionCompatUtils.getCraftHandle(world);
-        Field field = Reflector.getField(nmsWorld.getClass(), "spigotConfig");
-        return Reflector.getFieldValue(field, nmsWorld);
     }
 
     public static Object getAsNmsCopy(ItemStack iStack) {
