@@ -29,6 +29,7 @@ import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
+import javax.annotation.Nullable;
 import java.util.*;
 
 import static io.papermc.paper.event.entity.EntityKnockbackEvent.*;
@@ -104,7 +105,9 @@ public class ModulePlayerKnockback extends OCMModule {
         final UUID uuid = player.getUniqueId();
         playerKnockback.remove(uuid);
         playerRangedKnockback.remove(uuid);
+        ignoreKnockback.remove(uuid);
         blockedBySword.remove(uuid);
+        blockHitArrows.remove(uuid);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -112,13 +115,11 @@ public class ModulePlayerKnockback extends OCMModule {
         Player player = event.getPlayer();
 
         final UUID uuid = player.getUniqueId();
-        Vector velocity = playerRangedKnockback.get(uuid);
+        Vector velocity = playerRangedKnockback.remove(uuid);
 
         // Ensures that knockback from ranged player attacks matches 1.8 pvp
-        if (velocity != null) {
+        if (velocity != null)
             event.setVelocity(velocity);
-            playerRangedKnockback.remove(uuid);
-        }
     }
 
     // Use the "EntityPushedByEntityAttackEvent" event instead of "EntityKnockbackByEntityEvent" in order
@@ -160,10 +161,13 @@ public class ModulePlayerKnockback extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         final Entity damager = event.getDamager();
-        if (!(damager instanceof LivingEntity) && !(damager instanceof Projectile))
+        final Entity damagee = event.getEntity();
+        final Entity rodder = getRodder(damagee);
+        boolean fromRod = damager.equals(rodder);
+
+        if (!(damager instanceof LivingEntity) && !(damager instanceof Projectile) && !fromRod)
             return;
 
-        final Entity damagee = event.getEntity();
         if (!(damagee instanceof LivingEntity livingDamagee))
             return;
 
@@ -252,7 +256,7 @@ public class ModulePlayerKnockback extends OCMModule {
         }
 
         // Calculate bonus knockback for sprinting or knockback enchantment levels
-        if (damager instanceof LivingEntity attacker && isAttack) {
+        if (damager instanceof LivingEntity attacker && isAttack && !fromRod) {
             final EntityEquipment equipment = attacker.getEquipment();
             if (equipment != null) {
                 ItemStack mainHandItem = equipment.getItemInMainHand();
@@ -319,7 +323,7 @@ public class ModulePlayerKnockback extends OCMModule {
 
         // Sometimes PlayerVelocityEvent doesn't fire, remove data to not affect later
         // events if that happens
-        if (damager instanceof Projectile && damagee instanceof Player) {
+        if ((damager instanceof Projectile || fromRod) && damagee instanceof Player) {
             playerRangedKnockback.put(victimId, playerVelocity);
             Bukkit.getScheduler().runTaskLater(plugin, () -> playerRangedKnockback.remove(victimId), 2);
         }
@@ -446,14 +450,20 @@ public class ModulePlayerKnockback extends OCMModule {
             loc.setDirection(knockback);
             float yaw = loc.getYaw();
 
-            AbstractArrow abstractArrow = blockHitArrows.get(uuid);
+            AbstractArrow abstractArrow = blockHitArrows.remove(uuid);
             if (noDeflectArrow && abstractArrow != null) {
                 abstractArrow.remove();
                 livingEntity.setArrowsInBody(livingEntity.getArrowsInBody() + 1);
             }
 
             livingEntity.playHurtAnimation(yaw);
-            blockedBySword.remove(uuid);
         }
+    }
+
+    @Nullable
+    private Player getRodder(Entity damagee) {
+        final UUID victimId = damagee.getUniqueId();
+        Map<UUID, Player> rodEntities = ModuleFishingKnockback.getRodEntities();
+        return rodEntities.remove(victimId);
     }
 }

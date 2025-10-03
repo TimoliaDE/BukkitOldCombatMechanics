@@ -55,7 +55,7 @@ public class ModuleAttackFrequency extends OCMModule {
     }
 
     @EventHandler
-    public void onPlayerChangeWorld(PlayerChangedWorldEvent e) {
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent e) {
         final Player player = e.getPlayer();
         setDelay(player, isEnabled(player) ? playerDelay : DEFAULT_DELAY);
     }

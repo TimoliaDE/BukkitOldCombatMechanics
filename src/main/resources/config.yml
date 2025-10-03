@@ -48,7 +48,6 @@ modesets:
     - "fix-bow-shoot"
     - "old-fall-damage"
     - "old-water-placement"
-    - "old-attack-range"
     - "projectile-knockback"
 
 worlds:
@@ -298,8 +297,8 @@ old-player-knockback:
 
 old-projectile-trajectory:
   # This disables the relative projectile velocity. In other words,
-  # the projectile will not be affected by the player's movement,
-  # such as jumping.
+  # projectiles such as arrows or thrown potions will no longer be
+  # affected by the player's movement, e.g. when jumping.
   enabled: true
 
 no-deflect-fire-projectile:
@@ -334,16 +333,6 @@ old-water-placement:
   # the waterlogged block instead of directly on it.
   enabled: true
 
-old-attack-range:
-  # This matches the old attack range (3.1125 blocks) in 1.8 pvp.
-  # Only supported in version 1.20.5 or later.
-  # When enabled, this applies to 1.8 clients and 1.20.5+ clients only.
-  # However, 1.9–1.20.4 clients still have the new attack range
-  # (3.0 blocks) due to technical limitations.
-  enabled: true
-  # This determines the attack range value.
-  entityInteractionRange: 3.1125
-
 old-fishing-knockback:
   # This is to make the knockback of players when they get hit by a fishing bobber the same as it was in pre-1.9
   enabled: true
@@ -353,9 +342,7 @@ old-fishing-knockback:
   # Options: all, players, mobs, none. players allows compatibility with WorldGuard pvp-deny regions
   cancelDraggingIn: players
   # Whether to also give knockback on non-player living entities (e.g. mobs)
-  knockbackNonPlayerEntities: false
-  # This is the delay in milliseconds in-between rod damage, so the player hit has time to fall back down
-  hitCooldown: 1000
+  knockbackNonPlayerEntities: true
 
 fishing-rod-velocity:
   # In 1.9+ fishing rods go 8 blocks instead of 12 blocks
