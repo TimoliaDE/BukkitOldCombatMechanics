@@ -15,6 +15,7 @@ The following options have been added to the config
 - `fix-bow-shoot`
 - `old-fall-damage`
 - `old-water-placement`
+- `damage-inside-wall`
 
 In addition, the default values for the following config options have been adjusted to better match Minecraft 1.8 PvP mechanics:
 
