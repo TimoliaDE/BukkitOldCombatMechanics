@@ -5,6 +5,7 @@ import io.papermc.paper.datacomponent.item.*;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.VersionCompatUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.type.ClassType;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
@@ -36,6 +37,13 @@ public class ReflectorUtil {
     private static final Map<Version, String> soundVolume;
     private static final Map<Version, String> random;
     private static final Map<Version, String> foodData;
+
+    private static final Map<Version, String> blockState;
+    private static final Map<Version, String> suffocating;
+
+    private static final Map<Version, String> damageSources;
+    private static final Map<Version, String> inWall;
+    private static final Map<Version, String> hurt;
 
     static {
         soundVolume = new HashMap<>();
@@ -73,6 +81,63 @@ public class ReflectorUtil {
         foodData.put(V_1_19_3, "fO");
         foodData.put(V_1_19_2, "fL");
         foodData.put(V_1_19_1, "fL");
+
+        blockState = new HashMap<>();
+
+        blockState.put(V_1_20_5_plus, "getBlockState");
+        blockState.put(V_1_20_4, "a_");
+        blockState.put(V_1_20_2, "a_");
+        blockState.put(V_1_20_1, "a_");
+
+        blockState.put(V_1_19_4, "a_");
+        blockState.put(V_1_19_3, "a_");
+        blockState.put(V_1_19_2, "a_");
+        blockState.put(V_1_19_1, "a_");
+
+        suffocating = new HashMap<>();
+
+        suffocating.put(V_1_20_5_plus, "isSuffocating");
+        suffocating.put(V_1_20_4, "r");
+        suffocating.put(V_1_20_2, "r");
+        suffocating.put(V_1_20_1, "r");
+
+        suffocating.put(V_1_19_4, "o");
+        suffocating.put(V_1_19_3, "o");
+        suffocating.put(V_1_19_2, "o");
+        suffocating.put(V_1_19_1, "o");
+
+        damageSources = new HashMap<>();
+
+        damageSources.put(V_1_20_5_plus, "damageSources");
+        damageSources.put(V_1_20_4, "dN");
+        damageSources.put(V_1_20_2, "dM");
+        damageSources.put(V_1_20_1, "dJ");
+
+        damageSources.put(V_1_19_4, "dG");
+
+        inWall = new HashMap<>();
+
+        inWall.put(V_1_20_5_plus, "inWall");
+        inWall.put(V_1_20_4, "g");
+        inWall.put(V_1_20_2, "g");
+        inWall.put(V_1_20_1, "g");
+
+        inWall.put(V_1_19_4, "g");
+        inWall.put(V_1_19_3, "f");
+        inWall.put(V_1_19_2, "f");
+        inWall.put(V_1_19_1, "f");
+
+        hurt = new HashMap<>();
+
+        hurt.put(V_1_20_5_plus, "hurt");
+        hurt.put(V_1_20_4, "a");
+        hurt.put(V_1_20_2, "a");
+        hurt.put(V_1_20_1, "a");
+
+        hurt.put(V_1_19_4, "a");
+        hurt.put(V_1_19_3, "a");
+        hurt.put(V_1_19_2, "a");
+        hurt.put(V_1_19_1, "a");
     }
 
     public static boolean isLatestVersionedPackage() {
@@ -209,5 +274,53 @@ public class ReflectorUtil {
     private static DataComponentType<?> getDataComponent(String name) {
         Class<?> dataComponentsClass = Reflector.getClass("net.minecraft.core.component.DataComponents");
         return Reflector.getFieldValue(Reflector.getField(dataComponentsClass, name), null);
+    }
+
+    public static boolean isSuffocating(World world, int x, int y, int z) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 21, 5))
+            return world.getBlockState(x, y, z).isSuffocating();
+
+        Version ver = Version.get(Reflector.getVersion());
+        if (ver == null) throw new RuntimeException();
+
+        String blockStateName = blockState.get(ver);
+        String suffocatingName = suffocating.get(ver);
+
+        Object nmsWorld = VersionCompatUtils.getCraftHandle(world);
+
+        BlockPos pos = new BlockPos(x, y, z);
+        Method blockStateMethod = Reflector.getMethod(nmsWorld.getClass(), blockStateName, 1);
+        Object blockStateObject = Reflector.invokeMethod(blockStateMethod, nmsWorld, pos);
+        Method suffocatingMethod = Reflector.getMethod(blockStateObject.getClass(), suffocatingName, 2);
+        return Reflector.invokeMethod(suffocatingMethod, blockStateObject, nmsWorld, pos);
+    }
+
+
+    public static void damage(Player player) {
+        Object nmsPlayer = VersionCompatUtils.getCraftHandle(player);
+        Object inWallObject;
+
+        Version ver = Version.get(Reflector.getVersion());
+        if (ver == null) throw new RuntimeException();
+        String inWallName = inWall.get(ver);
+
+        if (Reflector.versionIsNewerOrEqualTo(1, 19, 4)) {
+            String damageSourcesName = damageSources.get(ver);
+
+            Method damageSourcesMethod = Reflector.getMethod(nmsPlayer.getClass(), damageSourcesName, 0);
+            Object damageSourcesObject = Reflector.invokeMethod(damageSourcesMethod, nmsPlayer);
+
+            Method inWallMethod = Reflector.getMethod(damageSourcesObject.getClass(), inWallName, 0);
+            inWallObject = Reflector.invokeMethod(inWallMethod, damageSourcesObject);
+
+        } else {
+            Class<?> dataComponentsClass = Reflector.getClass("net.minecraft.world.damagesource.DamageSource");
+            inWallObject = Reflector.getFieldValue(Reflector.getField(dataComponentsClass, inWallName), null);
+        }
+
+        String hurtName = hurt.get(ver);
+        Method hurtMethod = Reflector.getMethod(nmsPlayer.getClass(), hurtName, 2,
+                inWallObject.getClass(), float.class);
+        Reflector.invokeMethod(hurtMethod, nmsPlayer, inWallObject, 1.0F);
     }
 }

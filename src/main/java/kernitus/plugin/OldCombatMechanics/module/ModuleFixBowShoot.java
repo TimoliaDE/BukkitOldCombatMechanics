@@ -13,10 +13,10 @@ import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.inventory.ItemStack;
 
 /**
- *  This fixes a bug where the arrow sometimes does not appear to fly client-side
- *  even though it works server-side when using a bow. This does not apply to crossbows.
- *  However, the arrow may be launched slightly delayed.
- *  Only supported in version 1.21.3 and later.
+ * This fixes a bug where the arrow sometimes does not appear to fly client-side
+ * even though it works server-side when using a bow. This does not apply to crossbows.
+ * However, the arrow may be launched slightly delayed.
+ * Only supported in version 1.21.3 and later.
  */
 public class ModuleFixBowShoot extends OCMModule {
 
@@ -24,10 +24,9 @@ public class ModuleFixBowShoot extends OCMModule {
         super(plugin, "fix-bow-shoot");
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityShootBow(EntityShootBowEvent event) {
         if (!Reflector.versionIsNewerOrEqualTo(1, 21, 3)) return;
-        if (event.isCancelled()) return;
         final LivingEntity livingEntity = event.getEntity();
         if (!(livingEntity instanceof Player player)) return;
         if (!isEnabled(player)) return;
