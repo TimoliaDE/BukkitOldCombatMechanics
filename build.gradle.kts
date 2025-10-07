@@ -42,7 +42,7 @@ dependencies {
     // Mojang mappings for NMS
 
     compileOnly("com.mojang:authlib:4.0.43")
-    paperweight.paperDevBundle("1.21.8-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.9-R0.1-SNAPSHOT")
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.1")
 }
@@ -56,25 +56,6 @@ java {
 tasks {
     assemble {
         dependsOn(reobfJar)
-    }
-    reobfJar {
-        doLast {
-            val buildLibs = layout.buildDirectory.dir("libs").get().asFile
-            val reobfFile = buildLibs.listFiles()
-                ?.firstOrNull { it.name.endsWith("-reobf.jar") }
-                ?: throw GradleException("No reobf jar found in $buildLibs")
-
-            // Delete all JAR files from "build/libs" except the -reobf.jar file
-            buildLibs.listFiles()?.forEach { file ->
-                if (file.name.endsWith(".jar") && file != reobfFile) {
-                    file.delete()
-                }
-            }
-
-            // Rename the single -reobf.jar to the final artifact name
-            val targetFile = buildLibs.resolve("${project.name}-${project.version}.jar")
-            reobfFile.renameTo(targetFile)
-        }
     }
     shadowJar {
         relocate("org.bstats", "kernitus.plugin.OldCombatMechanics.lib.bstats")

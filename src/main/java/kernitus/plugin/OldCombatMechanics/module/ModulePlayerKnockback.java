@@ -70,6 +70,7 @@ public class ModulePlayerKnockback extends OCMModule {
     private final Map<UUID, Vector> playerRangedKnockback = new WeakHashMap<>();
     private final Set<UUID> ignoreKnockback = new HashSet<>();
     private final Map<UUID, Boolean> blockedBySword = new WeakHashMap<>();
+    private final Set<UUID> moduleShield = new HashSet<>();
     private final Map<UUID, AbstractArrow> blockHitArrows = new WeakHashMap<>();
 
     public ModulePlayerKnockback(OCMMain plugin) {
@@ -130,8 +131,7 @@ public class ModulePlayerKnockback extends OCMModule {
         if (!(entity instanceof LivingEntity livingEntity)) return;
 
         final UUID uuid = entity.getUniqueId();
-        Cause cause = event.getCause();
-        boolean usedModuleShield = blockedBySword.containsKey(uuid) && cause == Cause.SHIELD_BLOCK;
+        boolean usedModuleShield = isUsingModuleShield(uuid, event);
 
         if (ignoreKnockback.contains(uuid) || usedModuleShield) {
             event.setCancelled(true);
@@ -332,17 +332,24 @@ public class ModulePlayerKnockback extends OCMModule {
     }
 
     private void handleBlockHit(Entity damager, UUID victimId, boolean useBlockhit, boolean fromPlayer) {
-        if (useBlockhit)
+        if (useBlockhit) {
             blockedBySword.put(victimId, fromPlayer);
+            // Sometimes EntityPushedByEntityAttackEvent doesn't fire, remove data to not affect later
+            // events if that happens
+            Bukkit.getScheduler().runTaskLater(plugin, () -> blockedBySword.remove(victimId), 1);
+
+            if (!Reflector.versionIsNewerOrEqualTo(1, 20, 4)) {
+                moduleShield.add(victimId);
+                // Sometimes EntityPushedByEntityAttackEvent doesn't fire, remove data to not affect later
+                // events if that happens
+                Bukkit.getScheduler().runTaskLater(plugin, () -> moduleShield.remove(victimId), 1);
+            }
+        }
 
         if (damager instanceof AbstractArrow abstractArrow && !(damager instanceof Trident)) {
             blockHitArrows.put(victimId, abstractArrow);
             Bukkit.getScheduler().runTaskLater(plugin, () -> blockHitArrows.remove(victimId), 1);
         }
-
-        // Sometimes EntityPushedByEntityAttackEvent doesn't fire, remove data to not affect later
-        // events if that happens
-        Bukkit.getScheduler().runTaskLater(plugin, () -> blockedBySword.remove(victimId), 1);
     }
 
     private static Vector getHorizontalDirection(Projectile proj) {
@@ -422,6 +429,15 @@ public class ModulePlayerKnockback extends OCMModule {
                 e.printStackTrace();
             }
         }
+    }
+
+    private boolean isUsingModuleShield(final UUID uuid, EntityPushedByEntityAttackEvent event) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 20, 4)) {
+            Cause cause = event.getCause();
+            return  blockedBySword.containsKey(uuid) && cause == Cause.SHIELD_BLOCK;
+        }
+
+        return moduleShield.remove(uuid);
     }
 
     /*

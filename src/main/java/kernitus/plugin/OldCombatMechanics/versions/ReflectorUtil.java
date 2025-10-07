@@ -2,6 +2,7 @@ package kernitus.plugin.OldCombatMechanics.versions;
 
 import io.papermc.paper.configuration.WorldConfiguration;
 import io.papermc.paper.datacomponent.item.*;
+import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.VersionCompatUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.type.ClassType;
@@ -141,7 +142,7 @@ public class ReflectorUtil {
     }
 
     public static boolean isLatestVersionedPackage() {
-        return Reflector.versionIsNewerOrEqualTo(1, 21, 6);
+        return OCMMain.getInstance().isLatestNmsPackage();
     }
 
     public static float getSoundVolume(LivingEntity livingEntity) {

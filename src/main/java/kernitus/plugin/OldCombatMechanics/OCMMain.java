@@ -24,10 +24,12 @@ import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimpleBarChart;
 import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.EventException;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -48,6 +50,7 @@ public class OCMMain extends JavaPlugin {
     private final List<Runnable> disableListeners = new ArrayList<>();
     private final List<Runnable> enableListeners = new ArrayList<>();
     private final List<Hook> hooks = new ArrayList<>();
+    private boolean isLatestNmsPackage;
     private ProtocolManager protocolManager;
 
     public OCMMain() {
@@ -57,6 +60,10 @@ public class OCMMain extends JavaPlugin {
     @Override
     public void onEnable() {
         INSTANCE = this;
+
+        // Checks if the server is using the latest NMS package
+        // (e.g., "v1_21_R6" for Minecraft versions 1.21.9 and 1.21.10)
+        isLatestNmsPackage = checkLatestNmsPackage();
 
         // Setting up config.yml
         CH.setupConfigIfNotPresent();
@@ -148,6 +155,20 @@ public class OCMMain extends JavaPlugin {
         metrics.addCustomChart(new SimplePie("auto_update_pie",
                 () -> Config.moduleSettingEnabled("update-checker",
                         "auto-update") ? "enabled" : "disabled"));
+    }
+
+    private boolean checkLatestNmsPackage() {
+        try {
+            org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftCopy(new ItemStack(Material.STONE));
+            return true;
+
+        } catch (NoClassDefFoundError e) {
+            return false;
+        }
+    }
+
+    public boolean isLatestNmsPackage() {
+        return isLatestNmsPackage;
     }
 
     @Override
