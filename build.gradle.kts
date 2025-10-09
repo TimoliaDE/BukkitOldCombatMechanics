@@ -42,7 +42,7 @@ dependencies {
     // Mojang mappings for NMS
 
     compileOnly("com.mojang:authlib:4.0.43")
-    paperweight.paperDevBundle("1.21.9-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.10-R0.1-SNAPSHOT")
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.1")
 }
