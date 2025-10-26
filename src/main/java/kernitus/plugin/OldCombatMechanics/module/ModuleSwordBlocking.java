@@ -159,6 +159,8 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler
     public void onHotBarChange(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
@@ -170,6 +172,8 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
@@ -181,6 +185,8 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerLogout(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
@@ -192,6 +198,8 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
         final Player player = event.getEntity();
+        if (!isEnabled(player)) return;
+
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
@@ -213,6 +221,8 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
         final Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
             return;
@@ -225,6 +235,8 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent e) {
         if (e.getWhoClicked() instanceof Player player) {
+            if (!isEnabled(player)) return;
+
             if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
                 giveBlockAttributesToSwords(player);
                 return;
@@ -246,6 +258,7 @@ public class ModuleSwordBlocking extends OCMModule {
     public void onItemDrop(PlayerDropItemEvent event) {
         final Item is = event.getItemDrop();
         final Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
 
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
             giveBlockAttributesToSwords(player);
