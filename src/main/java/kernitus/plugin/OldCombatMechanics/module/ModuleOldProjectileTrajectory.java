@@ -31,20 +31,25 @@ public class ModuleOldProjectileTrajectory extends OCMModule {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         handleProjectileVelocity(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
-        World world = player.getWorld();
+        if (!isEnabled(player)) return;
 
-        if (hasDisabledRelativeProjectileVelocity(world))
-            disableRelativeProjectileVelocity(world);
+        handleProjectileVelocity(player);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         handleProjectileVelocity(event.getPlayer());
     }
 
