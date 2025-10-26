@@ -254,10 +254,13 @@ old-player-knockback:
   # Vertical knockback is not reduced by clicking faster
   # Increase to make clicking less important, decrease to make clicking more important
   knockback-vertical: 0.4
-  # Friction determines how much of the current horizontal/vertical knockback is retained before
-  # every successful attack
-  knockback-horizontal-friction: 0.5
-  knockback-vertical-friction: 0.5
+  # Friction determines how much of the existing horizontal/vertical knockback is retained
+  # before applying the new knockback from a successful attack
+  knockback-melee-horizontal-friction: 0.5
+  knockback-melee-vertical-friction: 0.5
+  # Friction should be the same for both melee and ranged attacks
+  knockback-ranged-horizontal-friction: 0.5
+  knockback-ranged-vertical-friction: 0.5
   # Vertical knockback limit is applied after base vertical knockback
   # This limit can be exceeded by sprint hitting or knockback enchantments, from the extra vertical knockback
   knockback-vertical-limit: 0.4
