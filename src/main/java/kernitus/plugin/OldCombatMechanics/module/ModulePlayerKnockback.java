@@ -53,8 +53,10 @@ public class ModulePlayerKnockback extends OCMModule {
 
     private double knockbackHorizontal;
     private double knockbackVertical;
-    private double knockbackHorizontalFriction;
-    private double knockbackVerticalFriction;
+    private double knockbackMeleeHorizontalFriction;
+    private double knockbackMeleeVerticalFriction;
+    private double knockbackRangedHorizontalFriction;
+    private double knockbackRangedVerticalFriction;
     private double knockbackVerticalLimit;
     private double knockbackExtraMeleeHorizontal;
     private double knockbackExtraMeleeVertical;
@@ -86,8 +88,10 @@ public class ModulePlayerKnockback extends OCMModule {
     public void reload() {
         knockbackHorizontal = module().getDouble("knockback-horizontal", 0.4);
         knockbackVertical = module().getDouble("knockback-vertical", 0.4);
-        knockbackHorizontalFriction = module().getDouble("knockback-horizontal-friction", 0.5);
-        knockbackVerticalFriction = module().getDouble("knockback-vertical-friction", 0.5);
+        knockbackMeleeHorizontalFriction = module().getDouble("knockback-melee-horizontal-friction", 0.5);
+        knockbackMeleeVerticalFriction = module().getDouble("knockback-melee-vertical-friction", 0.5);
+        knockbackRangedHorizontalFriction = module().getDouble("knockback-ranged-horizontal-friction", 0.5);
+        knockbackRangedVerticalFriction = module().getDouble("knockback-ranged-vertical-friction", 0.5);
         knockbackVerticalLimit = module().getDouble("knockback-vertical-limit", 0.4);
         knockbackExtraMeleeHorizontal = module().getDouble("knockback-extra-melee-horizontal", 0.5);
         knockbackExtraMeleeVertical = module().getDouble("knockback-extra-melee-vertical", 0.1);
@@ -248,11 +252,22 @@ public class ModulePlayerKnockback extends OCMModule {
                 hasBaseKnockback = new Random().nextDouble() < resistanceFactor;
         }
 
+        final double horizontalFriction, verticalFriction;
+
+        if (isProjectile) {
+            horizontalFriction = knockbackRangedHorizontalFriction;
+            verticalFriction = knockbackRangedVerticalFriction;
+
+        } else {
+            horizontalFriction = knockbackMeleeHorizontalFriction;
+            verticalFriction = knockbackMeleeVerticalFriction;
+        }
+
         // Apply friction, then add base knockback
         if (hasBaseKnockback) {
-            playerVelocity.setX(knockbackHorizontalFriction * playerVelocity.getX() - (xDir * knockbackHorizontal));
-            playerVelocity.setY(knockbackVerticalFriction * playerVelocity.getY() + knockbackVertical);
-            playerVelocity.setZ(knockbackHorizontalFriction * playerVelocity.getZ() - (zDir * knockbackHorizontal));
+            playerVelocity.setX(horizontalFriction * playerVelocity.getX() - (xDir * knockbackHorizontal));
+            playerVelocity.setY(verticalFriction * playerVelocity.getY() + knockbackVertical);
+            playerVelocity.setZ(horizontalFriction * playerVelocity.getZ() - (zDir * knockbackHorizontal));
         }
 
         // Calculate bonus knockback for sprinting or knockback enchantment levels
