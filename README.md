@@ -27,7 +27,10 @@ In addition, the default values for the following config options have been adjus
 - `old-player-regen`
 - `projectile-knockback`
 
-This plugin requires Java 21 and supports the Minecraft Java versions 1.20.2–1.21.10.
+This plugin requires **Java 21 or higher** and supports the **Minecraft Java Edition** versions **1.20.2–1.21.10**.
 
 ### ⚠️ Important Note
-In the `build/libs` folder, use **`OldCombatMechanics-v2.1.0-adapted-reobf.jar`** — it’s the only file (with the `.reobf.jar` ending) that will work correctly.
+Use **only** the JAR file ending with `.reobf.jar`:  
+**`OldCombatMechanics-v2.2.0-adapted-reobf.jar`**
+
+Other JAR files in the `build/libs` folder do **not** work properly.
