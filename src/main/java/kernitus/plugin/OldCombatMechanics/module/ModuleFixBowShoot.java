@@ -38,7 +38,10 @@ public class ModuleFixBowShoot extends OCMModule {
         if (proj instanceof AbstractArrow abstractArrow && !(proj instanceof Trident)) {
             World world = abstractArrow.getWorld();
             event.setProjectile(livingEntity);
-            Bukkit.getScheduler().runTask(plugin, () -> ReflectorUtil.spawnProjectile(world, abstractArrow, bow));
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                Entity projectile = ReflectorUtil.spawnProjectile(world, abstractArrow, bow);
+                event.setProjectile(projectile);
+            });
         }
     }
 }

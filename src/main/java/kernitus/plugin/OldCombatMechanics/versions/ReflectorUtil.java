@@ -173,6 +173,13 @@ public class ReflectorUtil {
         return Reflector.getFieldValue(Reflector.getField(nmsEntity.getClass(), name), nmsEntity);
     }
 
+    public static Entity getBukkitEntity(Object nmsEntity) {
+        if (isLatestVersionedPackage())
+            return ((net.minecraft.world.entity.Entity) nmsEntity).getBukkitEntity();
+
+        return Reflector.invokeMethod(Reflector.getMethod(nmsEntity.getClass(), "getBukkitEntity"), nmsEntity);
+    }
+
     public static WorldConfiguration.Misc getWorldConfigurationMisc(World world) {
         if (isLatestVersionedPackage()) {
             ServerLevel nmsWorld = ((CraftWorld) world).getHandle();
@@ -191,14 +198,14 @@ public class ReflectorUtil {
         return Reflector.invokeMethod(nmsCopyMethod, null, iStack);
     }
 
-    public static void spawnProjectile(World world, AbstractArrow arrow, ItemStack bow) {
+    public static Entity spawnProjectile(World world, AbstractArrow arrow, ItemStack bow) {
         if (isLatestVersionedPackage()) {
             net.minecraft.world.entity.projectile.AbstractArrow nmsArrow =
                     ((CraftAbstractArrow) arrow).getHandle();
             ServerLevel nmsWorld = ((CraftWorld) world).getHandle();
             net.minecraft.world.entity.projectile.Projectile.spawnProjectile(nmsArrow, nmsWorld,
                     CraftItemStack.asNMSCopy(bow));
-            return;
+            return nmsArrow.getBukkitEntity();
         }
 
         Object nmsBowCopy = getAsNmsCopy(bow);
@@ -206,6 +213,7 @@ public class ReflectorUtil {
         Object nmsArrow = VersionCompatUtils.getCraftHandle(arrow);
         Reflector.invokeMethod(Reflector.getMethod(nmsArrow.getClass(), "spawnProjectile",
                 3), nmsArrow, nmsArrow, nmsWorld, nmsBowCopy);
+        return getBukkitEntity(nmsArrow);
     }
 
     public static Object getNmsItemStack(ItemStack iStack) {
