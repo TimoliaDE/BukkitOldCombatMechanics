@@ -593,12 +593,13 @@ old-burn-delay:
 disable-attack-sounds:
   # Disables attack sounds that were added with 1.9+
   # Requires ProtocolLib
-  enabled: false
+  enabled: true
   # The sounds that will be blocked by this module
   blocked-sound-names:
     - "ENTITY_PLAYER_ATTACK_STRONG"
     - "ENTITY_PLAYER_ATTACK_SWEEP"
     - "ENTITY_PLAYER_ATTACK_KNOCKBACK"
+    - "ENTITY_PLAYER_ATTACK_NODAMAGE"
     - "ENTITY_PLAYER_ATTACK_CRIT"
     - "ENTITY_PLAYER_ATTACK_WEAK"
 
