@@ -43,9 +43,9 @@ import static io.papermc.paper.event.entity.EntityKnockbackEvent.*;
  * - Players blocking with a sword receive knockback when getting hurt
  * - Knockback combos are closer to the 1.8 version
  * - Knockback resistance determines the chance of applying the base knockback
- *   instead of reduces knockback by a relative amount. This option only works
- *   for living entities other than players to make netherite armor work for
- *   players correctly.
+ * instead of reduces knockback by a relative amount. This option only works
+ * for living entities other than players to make netherite armor work for
+ * players correctly.
  * <p>
  * Note: Knockback caused by mobs remains unchanged and follow the 1.9 version.
  */
@@ -297,15 +297,19 @@ public class ModulePlayerKnockback extends OCMModule {
                 }
             }
 
-        } else if (damager instanceof AbstractArrow abstractArrow && isProjectile) {
-            int bonusKnockback;
-            if (Reflector.versionIsNewerOrEqualTo(1, 21, 0)) {
-                final ItemStack heldItem = abstractArrow.getWeapon();
-                bonusKnockback = heldItem != null ? heldItem.getEnchantmentLevel(XEnchantment.PUNCH.get()) : 0;
+        } else if (isProjectile) {
+            int bonusKnockback = 0;
 
-            } else
-                bonusKnockback = abstractArrow.getKnockbackStrength();
+            if (damager instanceof AbstractArrow abstractArrow) {
+                if (Reflector.versionIsNewerOrEqualTo(1, 21, 0)) {
+                    final ItemStack heldItem = abstractArrow.getWeapon();
+                    bonusKnockback = heldItem != null ? heldItem.getEnchantmentLevel(XEnchantment.PUNCH.get()) : 0;
 
+                } else
+                    bonusKnockback = abstractArrow.getKnockbackStrength();
+            }
+
+            // Note: The vertical knockback limit needs also to be applied to snowballs as well
             if (playerVelocity.getY() > knockbackVerticalLimit)
                 playerVelocity.setY(knockbackVerticalLimit);
 
@@ -449,7 +453,7 @@ public class ModulePlayerKnockback extends OCMModule {
     private boolean isUsingModuleShield(final UUID uuid, EntityPushedByEntityAttackEvent event) {
         if (Reflector.versionIsNewerOrEqualTo(1, 20, 4)) {
             Cause cause = event.getCause();
-            return  blockedBySword.containsKey(uuid) && cause == Cause.SHIELD_BLOCK;
+            return blockedBySword.containsKey(uuid) && cause == Cause.SHIELD_BLOCK;
         }
 
         return moduleShield.remove(uuid);
