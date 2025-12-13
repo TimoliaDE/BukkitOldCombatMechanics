@@ -17,16 +17,15 @@ import org.bukkit.plugin.Plugin;
 import java.util.Locale;
 
 /**
- * A module to disable the sweep attack.
+ * A module to disable the sword sweep and damage indicator particles.
  */
-public class ModuleSwordSweepParticles extends OCMModule {
+public class ModuleNewAttackParticles extends OCMModule {
 
     private final ProtocolManager protocolManager = plugin.getProtocolManager();
     private final ParticleListener particleListener = new ParticleListener(plugin);
 
-    public ModuleSwordSweepParticles(OCMMain plugin) {
-        super(plugin, "disable-sword-sweep-particles");
-
+    public ModuleNewAttackParticles(OCMMain plugin) {
+        super(plugin, "disable-new-attack-particles");
         reload();
     }
 
@@ -63,7 +62,8 @@ public class ModuleSwordSweepParticles extends OCMModule {
                     particleName = packetContainer.getParticles().read(0).name(); // for pre 1.13
                 }
 
-                if (particleName.toUpperCase(Locale.ROOT).contains("SWEEP")) {
+                String particleId = particleName.toUpperCase(Locale.ROOT);
+                if (particleId.contains("SWEEP") || particleId.contains("DAMAGE_INDICATOR")) {
                     packetEvent.setCancelled(true);
                     debug("Cancelled sweep particles", packetEvent.getPlayer());
                 }

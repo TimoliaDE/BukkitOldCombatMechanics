@@ -22,6 +22,7 @@ modesets:
   old:
     - "disable-attack-cooldown"
     - "disable-sword-sweep"
+    - "disable-new-attack-particles"
     - "disable-offhand"
     - "old-tool-damage"
     - "sword-blocking"
@@ -202,7 +203,7 @@ disable-sword-sweep:
 disable-sword-sweep-particles:
   # This is to disable the sword sweep attack particles
   # Requires ProtocolLib
-  enabled: false
+  enabled: true
 
 # ########################
 # KNOCKBACK
@@ -317,6 +318,16 @@ damage-inside-wall:
   enabled: true
   # If enabled, this does not apply when the player is swimming.
   withoutSwimming: false
+
+old-attack-range:
+  # This matches the old attack range (3.1125 blocks) in 1.8 pvp.
+  # Only supported in version 1.20.5 or later.
+  # When enabled, this applies to 1.8 clients and 1.20.5+ clients only.
+  # However, 1.9–1.20.4 clients still have the new attack range
+  # (3.0 blocks) due to technical limitations.
+  enabled: true
+  # This determines the attack range value.
+  entityInteractionRange: 3.0875
 
 old-fishing-knockback:
   # This is to make the knockback of players when they get hit by a fishing bobber the same as it was in pre-1.9

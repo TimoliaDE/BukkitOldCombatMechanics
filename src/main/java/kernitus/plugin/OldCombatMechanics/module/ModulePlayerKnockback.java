@@ -177,7 +177,7 @@ public class ModulePlayerKnockback extends OCMModule {
 
         EntityDamageEvent.DamageCause cause = event.getCause();
         boolean isAttack = cause == EntityDamageEvent.DamageCause.ENTITY_ATTACK;
-        boolean isProjectile = cause == EntityDamageEvent.DamageCause.PROJECTILE;
+        boolean isProjectile = cause == EntityDamageEvent.DamageCause.PROJECTILE && !(damager instanceof Fireball);
 
         if (!isAttack && !isProjectile)
             return;

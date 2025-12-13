@@ -200,7 +200,7 @@ public class ReflectorUtil {
 
     public static Entity spawnProjectile(World world, AbstractArrow arrow, ItemStack bow) {
         if (isLatestVersionedPackage()) {
-            net.minecraft.world.entity.projectile.AbstractArrow nmsArrow =
+            net.minecraft.world.entity.projectile.arrow.AbstractArrow nmsArrow =
                     ((CraftAbstractArrow) arrow).getHandle();
             ServerLevel nmsWorld = ((CraftWorld) world).getHandle();
             net.minecraft.world.entity.projectile.Projectile.spawnProjectile(nmsArrow, nmsWorld,

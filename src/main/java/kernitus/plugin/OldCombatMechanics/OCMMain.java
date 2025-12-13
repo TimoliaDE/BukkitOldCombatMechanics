@@ -25,17 +25,22 @@ import org.bstats.charts.SimpleBarChart;
 import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.EventException;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -97,10 +102,12 @@ public class OCMMain extends JavaPlugin {
         // Initialise all the hooks
         hooks.forEach(hook -> hook.init(this));
 
+        registerCommand("OldCombatMechanics", new OCMCommandHandler(this),
+                new OCMCommandCompleter());
         // Set up the command handler
-        getCommand("OldCombatMechanics").setExecutor(new OCMCommandHandler(this));
+//        getCommand("OldCombatMechanics").setExecutor(new OCMCommandHandler(this));
         // Set up command tab completer
-        getCommand("OldCombatMechanics").setTabCompleter(new OCMCommandCompleter());
+//        getCommand("OldCombatMechanics").setTabCompleter(new OCMCommandCompleter());
 
         Config.reload();
 
@@ -272,9 +279,45 @@ public class OCMMain extends JavaPlugin {
         // These modules require ProtocolLib
         if (protocolManager != null) {
             ModuleLoader.addModule(new ModuleAttackSounds(this));
-            ModuleLoader.addModule(new ModuleSwordSweepParticles(this));
+            ModuleLoader.addModule(new ModuleNewAttackParticles(this));
         } else {
             Messenger.warn("No ProtocolLib detected, attack-sounds and sword-sweep-particles modules will be disabled");
+        }
+    }
+
+    public void registerCommand(String name, Object executor, Object completer) {
+        registerCommand(name, executor, completer, null);
+    }
+
+    public void registerCommand(String name, Object executor, Object completer, List<String> aliases) {
+        try {
+            // PluginCommand erzeugen
+            Constructor<PluginCommand> constructor =
+                    PluginCommand.class.getDeclaredConstructor(String.class, Plugin.class);
+            constructor.setAccessible(true);
+
+            PluginCommand command = constructor.newInstance(name, this);
+
+            // Wenn das Objekt CommandExecutor ist
+            if (executor instanceof CommandExecutor exec) {
+                command.setExecutor(exec);
+            }
+
+            // Wenn das Objekt TabCompleter ist
+            if (completer instanceof TabCompleter tab) {
+                command.setTabCompleter(tab);
+            }
+
+            // Aliases
+            if (aliases != null && !aliases.isEmpty()) {
+                command.setAliases(aliases);
+            }
+
+            // Registrierung
+            getServer().getCommandMap().register(name, command);
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

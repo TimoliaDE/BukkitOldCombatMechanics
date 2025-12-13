@@ -9,13 +9,15 @@ import com.cryptomorin.xseries.XAttribute;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage;
 import org.bukkit.Bukkit;
+import org.bukkit.Tag;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.*;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Disables the attack cooldown.
@@ -55,7 +57,13 @@ public class ModuleAttackCooldown extends OCMModule {
      * @param player the player to set the attack speed for
      */
     private void adjustAttackSpeed(Player player) {
-        final double attackSpeed = isEnabled(player)
+        adjustAttackSpeed(player, player.getInventory().getItemInMainHand());
+    }
+
+    private void adjustAttackSpeed(Player player, @Nullable ItemStack iStack) {
+        boolean isSpear = iStack != null && Tag.ITEMS_SPEARS.isTagged(iStack.getType());
+
+        final double attackSpeed = isEnabled(player) && !isSpear
                 ? module().getDouble("generic-attack-speed")
                 : NEW_ATTACK_SPEED;
 
@@ -65,6 +73,34 @@ public class ModuleAttackCooldown extends OCMModule {
     @Override
     public void onModesetChange(Player player) {
         adjustAttackSpeed(player);
+    }
+
+    @EventHandler
+    public void onHotBarChange(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        PlayerInventory inv = player.getInventory();
+
+        ItemStack newItem = inv.getItem(event.getNewSlot());
+        ItemStack oldItem = inv.getItem(event.getPreviousSlot());
+
+        boolean isSpearNew = newItem != null && Tag.ITEMS_SPEARS.isTagged(newItem.getType());
+        boolean isSpearOld = oldItem != null && Tag.ITEMS_SPEARS.isTagged(oldItem.getType());
+
+        if (isSpearNew != isSpearOld)
+            adjustAttackSpeed(player, newItem);
+    }
+
+    @EventHandler
+    public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        ItemStack mainHandItem = event.getMainHandItem();
+        ItemStack offhandItem = event.getOffHandItem();
+
+        boolean isSpearMainHand = Tag.ITEMS_SPEARS.isTagged(mainHandItem.getType());
+        boolean isSpearOffhand = Tag.ITEMS_SPEARS.isTagged(offhandItem.getType());
+
+        if (isSpearMainHand != isSpearOffhand)
+            adjustAttackSpeed(player, mainHandItem);
     }
 
     /**
