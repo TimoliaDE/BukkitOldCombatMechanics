@@ -63,9 +63,11 @@ public class ModuleNewAttackParticles extends OCMModule {
                 }
 
                 String particleId = particleName.toUpperCase(Locale.ROOT);
-                if (particleId.contains("SWEEP") || particleId.contains("DAMAGE_INDICATOR")) {
+                boolean isSweepParticle = particleId.contains("SWEEP");
+                if (isSweepParticle || particleId.contains("DAMAGE_INDICATOR")) {
                     packetEvent.setCancelled(true);
-                    debug("Cancelled sweep particles", packetEvent.getPlayer());
+                    debug("Cancelled " + (isSweepParticle ? "sweep" : "damage indicator") + " particles",
+                            packetEvent.getPlayer());
                 }
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
