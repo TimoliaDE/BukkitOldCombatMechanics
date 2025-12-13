@@ -117,6 +117,7 @@ public class ModulePlayerRegen extends OCMModule {
             case WALK -> quotient(exhaustion, 0.01F, otherMultiplier);
             case JUMP -> 0.2F;
             case JUMP_SPRINT -> 0.8F;
+            default -> exhaustion;
         };
 
         event.setExhaustion(amount);

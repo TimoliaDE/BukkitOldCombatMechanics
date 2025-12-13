@@ -17,16 +17,15 @@ import org.bukkit.plugin.Plugin;
 import java.util.Locale;
 
 /**
- * A module to disable the sweep attack.
+ * A module to disable the sword sweep and damage indicator particles.
  */
-public class ModuleSwordSweepParticles extends OCMModule {
+public class ModuleNewAttackParticles extends OCMModule {
 
     private final ProtocolManager protocolManager = plugin.getProtocolManager();
     private final ParticleListener particleListener = new ParticleListener(plugin);
 
-    public ModuleSwordSweepParticles(OCMMain plugin) {
-        super(plugin, "disable-sword-sweep-particles");
-
+    public ModuleNewAttackParticles(OCMMain plugin) {
+        super(plugin, "disable-new-attack-particles");
         reload();
     }
 
@@ -56,25 +55,15 @@ public class ModuleSwordSweepParticles extends OCMModule {
 
             try {
                 final PacketContainer packetContainer = packetEvent.getPacket();
-                String particleName = null;
+                String particleName;
                 try {
-                    com.comphenix.protocol.wrappers.WrappedParticle<?> newParticle =
-                            packetContainer.getNewParticles().read(0);
-                    if (newParticle != null && newParticle.getParticle() != null) {
-                        particleName = newParticle.getParticle().name();
-                    }
-                } catch (Exception exception) { // fall back for legacy packets / wrappers
-                    com.comphenix.protocol.wrappers.EnumWrappers.Particle legacyParticle =
-                            packetContainer.getParticles().read(0); // for pre 1.13
-                    if (legacyParticle != null) {
-                        particleName = legacyParticle.name();
-                    }
+                    particleName = packetContainer.getNewParticles().read(0).getParticle().name();
+                } catch (Exception exception) {
+                    particleName = packetContainer.getParticles().read(0).name(); // for pre 1.13
                 }
 
-                if (particleName == null)
-                    return; // unknown particle; do not disable the listener
-
-                if (particleName.toUpperCase(Locale.ROOT).contains("SWEEP")) {
+                String particleId = particleName.toUpperCase(Locale.ROOT);
+                if (particleId.contains("SWEEP") || particleId.contains("DAMAGE_INDICATOR")) {
                     packetEvent.setCancelled(true);
                     debug("Cancelled sweep particles", packetEvent.getPlayer());
                 }
