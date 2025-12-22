@@ -1,11 +1,14 @@
 name: OldCombatMechanics
 main: kernitus.plugin.OldCombatMechanics.OCMMain
 version: 2.2.0
-api-version: 1.21
+api-version: 1.19
 
 dependencies:
   server:
     ProtocolLib:
+      required: false
+      load: BEFORE
+    ViaVersion:
       required: false
       load: BEFORE
     PlaceholderAPI:

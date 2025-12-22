@@ -28,7 +28,7 @@ public class ModuleOldWaterPlacement extends OCMModule {
         super(plugin, "old-water-placement");
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGH)
     public void handlePlayerBucketEmpty(PlayerBucketEmptyEvent event) {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;

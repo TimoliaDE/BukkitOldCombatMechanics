@@ -38,6 +38,7 @@ import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
@@ -86,8 +87,8 @@ public class OCMMain extends JavaPlugin {
         Messenger.initialise(this);
 
         try {
-            if (getServer().getPluginManager().getPlugin("ProtocolLib") != null &&
-                    getServer().getPluginManager().getPlugin("ProtocolLib").isEnabled())
+            @Nullable Plugin plugin = getServer().getPluginManager().getPlugin("ProtocolLib");
+            if (plugin != null && plugin.isEnabled())
                 protocolManager = ProtocolLibrary.getProtocolManager();
         } catch (Exception e) {
             Messenger.warn("No ProtocolLib detected, some features might be disabled");
@@ -103,7 +104,7 @@ public class OCMMain extends JavaPlugin {
         hooks.forEach(hook -> hook.init(this));
 
         registerCommand("OldCombatMechanics", new OCMCommandHandler(this),
-                new OCMCommandCompleter());
+                new OCMCommandCompleter(), List.of("ocm"));
         // Set up the command handler
 //        getCommand("OldCombatMechanics").setExecutor(new OCMCommandHandler(this));
         // Set up command tab completer
@@ -257,7 +258,6 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleFishingKnockback(this));
         ModuleLoader.addModule(new ModulePlayerKnockback(this));
         ModuleLoader.addModule(new ModuleOldProjectileTrajectory(this));
-        ModuleLoader.addModule(new ModuleNoDeflectFireProjectile(this));
         ModuleLoader.addModule(new ModuleOldBowDamage(this));
         ModuleLoader.addModule(new ModuleFixBowShoot(this));
         ModuleLoader.addModule(new ModuleOldFallDamage(this));
@@ -281,12 +281,21 @@ public class OCMMain extends JavaPlugin {
             ModuleLoader.addModule(new ModuleAttackSounds(this));
             ModuleLoader.addModule(new ModuleNewAttackParticles(this));
         } else {
-            Messenger.warn("No ProtocolLib detected, attack-sounds and sword-sweep-particles modules will be disabled");
+            Messenger.warn("No ProtocolLib detected, attack-sounds and new-attack-particles modules " +
+                    "will be disabled");
         }
-    }
 
-    public void registerCommand(String name, Object executor, Object completer) {
-        registerCommand(name, executor, completer, null);
+        @Nullable Plugin plugin = getServer().getPluginManager().getPlugin("ViaVersion");
+        boolean hasViaVersion = plugin != null && plugin.isEnabled();
+
+        // These modules require ViaVersion
+        if (hasViaVersion) {
+            ModuleLoader.addModule(new ModuleFixArrowSound(this));
+            ModuleLoader.addModule(new ModuleFixCobwebPlaceSound(this));
+        } else {
+            Messenger.warn("No ViaVersion detected, fix-arrow-sound and fix-cobweb-place-sound modules " +
+                    "will be disabled");
+        }
     }
 
     public void registerCommand(String name, Object executor, Object completer, List<String> aliases) {

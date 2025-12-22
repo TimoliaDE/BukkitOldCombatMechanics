@@ -22,29 +22,31 @@ allprojects {
         maven("https://repo.codemc.org/repository/maven-public/")
         // Auth library from Minecraft
         maven("https://libraries.minecraft.net/")
+        maven("https://repo.viaversion.com")
     }
 }
 
 dependencies {
     implementation("org.bstats:bstats-bukkit:3.1.0")
     // Shaded in by Bukkit
-    compileOnly("io.netty:netty-all:4.1.106.Final")
+    compileOnly("io.netty:netty-all:4.2.9.Final")
     // Placeholder API
     compileOnly("me.clip:placeholderapi:2.11.5")
     // For BSON file serialisation
-    implementation("org.mongodb:bson:5.0.1")
+    implementation("org.mongodb:bson:5.6.2")
     // ProtocolLib
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     // XSeries
-    implementation("com.github.cryptomorin:XSeries:13.3.3")
+    implementation("com.github.cryptomorin:XSeries:13.6.0")
 
     //For ingametesting
     // Mojang mappings for NMS
 
     compileOnly("com.mojang:authlib:4.0.43")
-    paperweight.paperDevBundle("1.21.11-pre3-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     // For reflection remapping
-    implementation("xyz.jpenilla:reflection-remapper:0.1.1")
+    implementation("xyz.jpenilla:reflection-remapper:0.1.3")
+    compileOnly("com.viaversion:viaversion-api:5.6.0")
 }
 
 java {
