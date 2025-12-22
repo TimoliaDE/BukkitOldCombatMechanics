@@ -31,26 +31,39 @@ modesets:
   # PlaceholderAPI: %ocm_modeset%
   old:
     - "disable-attack-cooldown"
-    - "disable-sword-sweep"
-    - "disable-new-attack-particles"
-    - "disable-offhand"
+    - "attack-frequency"
     - "old-tool-damage"
-    - "sword-blocking"
-    - "shield-damage-reduction"
-    - "old-golden-apples"
-    - "old-player-knockback"
+    - "old-critical-hits"
     - "old-player-regen"
     - "old-armour-strength"
-    - "old-potion-effects"
-    - "old-critical-hits"
+    - "old-armour-durability"
+    - "shield-damage-reduction"
+    - "sword-blocking"
+    - "disable-sword-sweep"
+    - "disable-new-attack-particles"
+    - "old-player-knockback"
     - "old-projectile-trajectory"
-    - "no-deflect-fire-projectile"
     - "old-bow-damage"
+    - "fix-arrow-sound"
+    - "replace-cobweb-sound"
     - "fix-bow-shoot"
     - "old-fall-damage"
     - "old-water-placement"
     - "damage-inside-wall"
+    - "old-attack-range"
+    - "old-fishing-knockback"
+    - "fishing-rod-velocity"
     - "projectile-knockback"
+    - "old-golden-apples"
+    - "old-potion-effects"
+    - "disable-crafting"
+    - "disable-offhand"
+    - "old-brewing-stand"
+    - "disable-enderpearl-cooldown"
+    - "chorus-fruit"
+    - "old-burn-delay"
+    - "disable-attack-sounds"
+  new: []
 
 worlds:
   # These are the modesets available in each world.
@@ -80,8 +93,12 @@ mode-messages:
 disable-attack-cooldown:
   # This is to disable the attack cooldown
   enabled: true
+  # Excludes spears without the lunge effect from cooldown removal
+  excludeNormalSpears: false
+  # Excludes spears with the lunge effect from cooldown removal
+  excludeLungeSpears: true
   # What to set the attack speed to. Default for 1.9 is 4, at least 40 is needed for no cooldown.
-  generic-attack-speed: 40
+  generic-attack-speed: 80
 
 attack-frequency:
   # Allows changing the player invulnerability between hits
@@ -306,18 +323,24 @@ old-projectile-trajectory:
   # affected by the player's movement, e.g. when jumping.
   enabled: true
 
-no-deflect-fire-projectile:
-  # This removes the projectile when it hits a living entity during the
-  # 0.5 seconds invulnerability period caused by fire tick damage.
-  # This matches the behavior from 1.8 pvp.
-  enabled: true
-
 old-bow-damage:
   # This matches the bow damage to 1.8 version.
   enabled: true
   # This adjusts the crossbow to deal the same damage as the bow in 1.8 pvp,
   # where damage depends on the arrow’s velocity.
   includeCrossbow: false
+
+fix-arrow-sound:
+  # Fixes missing arrow pickup sound for 1.8 clients on newer versions
+  # (likely caused by ViaVersion).
+  # Requires ViaVersion.
+  enabled: true
+
+fix-cobweb-place-sound:
+  # Fixes incorrect cobweb placement sound for 1.8 clients on newer versions
+  # by replacing it with the stone place sound.
+  # Requires ViaVersion.
+  enabled: true
 
 fix-bow-shoot:
   # This fixes a bug where the arrow sometimes does not appear to fly client-side
@@ -607,7 +630,7 @@ disable-enderpearl-cooldown:
 
 chorus-fruit:
   # This makes the chorus fruit behaviour configurable
-  enabled: false
+  enabled: true
   # The maximum distance the fruit can teleport the player. This a PER AXIS value, so this outlines a cube with
   # 2 * max-teleportation-distance as the side length
   # Vanilla default is 8.
@@ -627,7 +650,7 @@ chorus-fruit:
 
 old-burn-delay:
   # This makes it so entities will immediately start to burn when entering fire
-  enabled: false
+  enabled: true
   # How long, in ticks, entities should be on fire for after not being in direct contact anymore
   fire-ticks: 120
 

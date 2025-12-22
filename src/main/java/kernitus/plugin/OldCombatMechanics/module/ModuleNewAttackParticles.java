@@ -57,26 +57,22 @@ public class ModuleNewAttackParticles extends OCMModule {
                 final PacketContainer packetContainer = packetEvent.getPacket();
                 String particleName;
                 try {
-                    particleName = packetContainer.getNewParticles().read(0).getParticle().name();
+                    particleName = packetContainer.getNewParticles().read(0).getParticle().getKey().getKey();
                 } catch (Exception exception) {
-                    particleName = packetContainer.getParticles().read(0).name(); // for pre 1.13
+                    particleName = packetContainer.getParticles().read(0).getName(); // for pre 1.13
                 }
 
                 String particleId = particleName.toUpperCase(Locale.ROOT);
                 boolean isSweepParticle = particleId.contains("SWEEP");
-                if (isSweepParticle || particleId.contains("DAMAGE_INDICATOR")) {
+                if (isSweepParticle || particleId.equals("DAMAGE_INDICATOR")) {
                     packetEvent.setCancelled(true);
                     debug("Cancelled " + (isSweepParticle ? "sweep" : "damage indicator") + " particles",
                             packetEvent.getPlayer());
                 }
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
-                Messenger.warn(
-                        e,
-                        "Error detecting sweep packets. Please report it along with the following exception " +
-                                "on github." +
-                                "Sweep cancellation should still work, but particles might show up."
-                );
+                Messenger.warn(e, "Error detecting sweep packets. Sweep cancellation should " +
+                        "still work, but particles might show up.");
             }
         }
     }

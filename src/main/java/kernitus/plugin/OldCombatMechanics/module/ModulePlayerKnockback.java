@@ -185,7 +185,8 @@ public class ModulePlayerKnockback extends OCMModule {
         // This condition is taken from the method "hurtServer" of the class "LivingEntity"
         // Sometimes, the ticks between two hits are much lower than about 10 ticks
         if (livingDamagee.getNoDamageTicks() > (float) livingDamagee.getMaximumNoDamageTicks() / 2.0F) {
-            event.setCancelled(true);
+            // Do not cancel the event here, or the entity won't take damage
+            // from swords/arrows while standing in fire without fire resistance.
             return;
         }
 
@@ -451,7 +452,7 @@ public class ModulePlayerKnockback extends OCMModule {
     }
 
     private boolean isUsingModuleShield(final UUID uuid, EntityPushedByEntityAttackEvent event) {
-        if (Reflector.versionIsNewerOrEqualTo(1, 20, 4)) {
+        if (Reflector.versionIsNewerOrEqualTo(1, 20, 6)) {
             Cause cause = event.getCause();
             return blockedBySword.containsKey(uuid) && cause == Cause.SHIELD_BLOCK;
         }

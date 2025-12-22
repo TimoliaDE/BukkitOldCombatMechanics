@@ -6,11 +6,14 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import com.cryptomorin.xseries.XAttribute;
+import io.papermc.paper.event.player.PlayerInventorySlotChangeEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage;
 import org.bukkit.Bukkit;
 import org.bukkit.Tag;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -25,6 +28,8 @@ import org.jetbrains.annotations.Nullable;
 public class ModuleAttackCooldown extends OCMModule {
 
     private final double NEW_ATTACK_SPEED = 4;
+    private boolean excludeNormalSpears;
+    private boolean excludeLungeSpears;
 
     public ModuleAttackCooldown(OCMMain plugin) {
         super(plugin, "disable-attack-cooldown");
@@ -32,6 +37,8 @@ public class ModuleAttackCooldown extends OCMModule {
 
     @Override
     public void reload() {
+        excludeNormalSpears = module().getBoolean("excludeNormalSpears", false);
+        excludeLungeSpears = module().getBoolean("excludeLungeSpears", true);
         Bukkit.getOnlinePlayers().forEach(this::adjustAttackSpeed);
     }
 
@@ -61,11 +68,8 @@ public class ModuleAttackCooldown extends OCMModule {
     }
 
     private void adjustAttackSpeed(Player player, @Nullable ItemStack iStack) {
-        boolean isSpear = iStack != null && Tag.ITEMS_SPEARS.isTagged(iStack.getType());
-
-        final double attackSpeed = isEnabled(player) && !isSpear
-                ? module().getDouble("generic-attack-speed")
-                : NEW_ATTACK_SPEED;
+        final double attackSpeed = isEnabled(player) && !isAffected(iStack) ?
+                module().getDouble("generic-attack-speed") : NEW_ATTACK_SPEED;
 
         setAttackSpeed(player, attackSpeed);
     }
@@ -76,31 +80,42 @@ public class ModuleAttackCooldown extends OCMModule {
     }
 
     @EventHandler
-    public void onHotBarChange(PlayerItemHeldEvent event) {
+    public void onPlayerInventorySlotChange(PlayerInventorySlotChangeEvent event) {
+        if (!excludeNormalSpears && !excludeLungeSpears) return;
+
         Player player = event.getPlayer();
-        PlayerInventory inv = player.getInventory();
+        if (!isEnabled(player)) return;
 
-        ItemStack newItem = inv.getItem(event.getNewSlot());
-        ItemStack oldItem = inv.getItem(event.getPreviousSlot());
+        ItemStack oldItem = event.getOldItemStack();
+        ItemStack newItem = event.getNewItemStack();
 
-        boolean isSpearNew = newItem != null && Tag.ITEMS_SPEARS.isTagged(newItem.getType());
-        boolean isSpearOld = oldItem != null && Tag.ITEMS_SPEARS.isTagged(oldItem.getType());
-
-        if (isSpearNew != isSpearOld)
+        boolean hasChanged = isAffected(oldItem) != isAffected(newItem);
+        if (hasChanged)
             adjustAttackSpeed(player, newItem);
     }
 
+    private boolean isAffected(ItemStack iStack) {
+        if (!Reflector.versionIsNewerOrEqualTo(1, 21, 11)) return false;
+
+        return iStack != null && (excludeNormalSpears && !hasLungeEffect(iStack) ||
+                excludeLungeSpears && hasLungeEffect(iStack)) &&
+                Tag.ITEMS_SPEARS.isTagged(iStack.getType());
+    }
+
     @EventHandler
-    public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
+    public void onPlayerItemHeld(PlayerItemHeldEvent event) {
+        if (!excludeNormalSpears && !excludeLungeSpears) return;
+
         Player player = event.getPlayer();
-        ItemStack mainHandItem = event.getMainHandItem();
-        ItemStack offhandItem = event.getOffHandItem();
+        if (!isEnabled(player)) return;
 
-        boolean isSpearMainHand = Tag.ITEMS_SPEARS.isTagged(mainHandItem.getType());
-        boolean isSpearOffhand = Tag.ITEMS_SPEARS.isTagged(offhandItem.getType());
+        PlayerInventory inv = player.getInventory();
+        ItemStack oldItem = inv.getItem(event.getPreviousSlot());
+        ItemStack newItem = inv.getItem(event.getNewSlot());
 
-        if (isSpearMainHand != isSpearOffhand)
-            adjustAttackSpeed(player, mainHandItem);
+        boolean hasChanged = isAffected(oldItem) != isAffected(newItem);
+        if (hasChanged)
+            adjustAttackSpeed(player, newItem);
     }
 
     /**
@@ -127,5 +142,13 @@ public class ModuleAttackCooldown extends OCMModule {
             attribute.setBaseValue(attackSpeed);
             player.saveData();
         }
+    }
+
+    private boolean hasLungeEffect(ItemStack iStack) {
+        if (!Reflector.versionIsNewerOrEqualTo(1, 21, 11)) return false;
+        if (iStack == null) return false;
+        if (!iStack.hasItemMeta()) return false;
+
+        return iStack.getItemMeta().hasEnchant(Enchantment.LUNGE);
     }
 }

@@ -99,11 +99,13 @@ public class ModuleSwordBlocking extends OCMModule {
         if (!isEnabled(player)) return;
 
         boolean usingHand = e.getHand() == EquipmentSlot.HAND;
+        boolean rightClick = action.isRightClick();
 
         if (Reflector.versionIsNewerOrEqualTo(1, 21, 3)) {
-            // Ensures that the offhand shield is priorizied when using a blocking sword
+            // Ensures that the offhand shield is prioritized when using a blocking sword
             // in the mainhand
-            if (hasShieldNoCooldown(player) && usingHand && ItemUtil.isHoldingConsumableSword(player, false)) {
+            if (rightClick && hasShieldNoCooldown(player) && usingHand &&
+                    ItemUtil.isHoldingConsumableSword(player, false)) {
                 removeBlockAttributesFromHoldingSword(player);
                 e.setCancelled(true);
                 Bukkit.getScheduler().runTask(plugin, () -> player.startUsingItem(EquipmentSlot.OFF_HAND));
@@ -114,7 +116,7 @@ public class ModuleSwordBlocking extends OCMModule {
             return;
         }
 
-        if (action != Action.RIGHT_CLICK_BLOCK && action != Action.RIGHT_CLICK_AIR) return;
+        if (!rightClick) return;
         // If they clicked on an interactive block, the 2nd event with the offhand won't fire
         // This is also the case if the main hand item was used, e.g. a bow
         // TODO right-clicking on a mob also only fires one hand
