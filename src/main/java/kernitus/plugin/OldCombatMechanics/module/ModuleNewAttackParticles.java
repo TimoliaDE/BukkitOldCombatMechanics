@@ -12,9 +12,12 @@ import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
-
-import java.util.Locale;
 
 /**
  * A module to disable the sword sweep and damage indicator particles.
@@ -49,25 +52,29 @@ public class ModuleNewAttackParticles extends OCMModule {
         }
 
         @Override
-        public void onPacketSending(PacketEvent packetEvent) {
-            if (disabledDueToError || !isEnabled(packetEvent.getPlayer().getWorld()))
+        public void onPacketSending(PacketEvent event) {
+            Player player = event.getPlayer();
+            if (disabledDueToError || !isEnabled(player.getWorld()))
                 return;
 
+            PacketContainer packet = event.getPacket();
             try {
-                final PacketContainer packetContainer = packetEvent.getPacket();
-                String particleName;
-                try {
-                    particleName = packetContainer.getNewParticles().read(0).getParticle().getKey().getKey();
-                } catch (Exception exception) {
-                    particleName = packetContainer.getParticles().read(0).getName(); // for pre 1.13
+                NamespacedKey namespacedKey;
+                if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
+                    namespacedKey = Registry.SOUND_EVENT.getKey(packet.getSoundEffects().read(0));
+                } else {
+                    namespacedKey = packet.getSoundEffects().read(0).getKey();
                 }
 
-                String particleId = particleName.toUpperCase(Locale.ROOT);
-                boolean isSweepParticle = particleId.contains("SWEEP");
-                if (isSweepParticle || particleId.equals("DAMAGE_INDICATOR")) {
-                    packetEvent.setCancelled(true);
+                if (namespacedKey == null) return;
+
+                String particleName = TextUtils.getFormattedString(namespacedKey.getKey());
+                boolean isSweepParticle = particleName.contains("SWEEP");
+
+                if (isSweepParticle || particleName.equals("DAMAGE_INDICATOR")) {
+                    event.setCancelled(true);
                     debug("Cancelled " + (isSweepParticle ? "sweep" : "damage indicator") + " particles",
-                            packetEvent.getPlayer());
+                            player);
                 }
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
