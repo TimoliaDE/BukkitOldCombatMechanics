@@ -61,9 +61,10 @@ public class ModuleNewAttackParticles extends OCMModule {
             try {
                 NamespacedKey namespacedKey;
                 if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
-                    namespacedKey = Registry.SOUND_EVENT.getKey(packet.getSoundEffects().read(0));
+                    namespacedKey = Registry.PARTICLE_TYPE.getKey(packet.getNewParticles()
+                            .read(0).getParticle());
                 } else {
-                    namespacedKey = packet.getSoundEffects().read(0).getKey();
+                    namespacedKey = packet.getNewParticles().read(0).getParticle().getKey();
                 }
 
                 if (namespacedKey == null) return;
@@ -78,8 +79,8 @@ public class ModuleNewAttackParticles extends OCMModule {
                 }
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
-                Messenger.warn(e, "Error detecting sweep packets. Sweep cancellation should " +
-                        "still work, but particles might show up.");
+                Messenger.warn(e, "Error detecting sweep or damage indicator packets. " +
+                        "Sweep cancellation should still work, but particles might show up.");
             }
         }
     }
