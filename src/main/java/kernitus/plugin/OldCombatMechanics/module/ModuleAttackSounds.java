@@ -14,6 +14,7 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.cryptomorin.xseries.XSound;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -66,7 +67,7 @@ public class ModuleAttackSounds extends OCMModule {
                     try {
                         Method getKeyMethod = Sound.class.getMethod("getKey");
                         Object key = getKeyMethod.invoke(sound);
-                        String formattedKey = getFormattedString(key.toString());
+                        String formattedKey = TextUtils.getFormattedString(key.toString());
                         processed.add(formattedKey);
                         continue;
                     } catch (Exception ignored) {
@@ -75,18 +76,13 @@ public class ModuleAttackSounds extends OCMModule {
                     }
                 }
                 // Fallback for older versions or if the sound is not in the Bukkit enum
-                String formattedKey = getFormattedString(soundName);
+                String formattedKey = TextUtils.getFormattedString(soundName);
                 processed.add(formattedKey);
             } else {
                 Messenger.warn("Invalid sound name in config: " + soundName);
             }
         }
         return processed;
-    }
-
-    private String getFormattedString(String soundName) {
-        return soundName.toUpperCase(Locale.ROOT)
-                .replaceFirst("MINECRAFT:", "").replace('.', '_');
     }
 
     /**
@@ -109,8 +105,6 @@ public class ModuleAttackSounds extends OCMModule {
                 return;
 
             PacketContainer packet = event.getPacket();
-            String soundName;
-
             try {
                 NamespacedKey namespacedKey;
                 if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
@@ -121,7 +115,7 @@ public class ModuleAttackSounds extends OCMModule {
 
                 if (namespacedKey == null) return;
 
-                soundName = getFormattedString(namespacedKey.getKey());
+                String soundName = TextUtils.getFormattedString(namespacedKey.getKey());
                 if (blockedSounds.contains(soundName)) {
                     event.setCancelled(true);
                     debug("Blocked sound " + soundName, player);

@@ -9,6 +9,7 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.viaversion.viaversion.api.Via;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -42,11 +43,6 @@ public class ModuleFixCobwebPlaceSound extends OCMModule {
             protocolManager.removePacketListener(soundListener);
     }
 
-    private String getFormattedString(String soundName) {
-        return soundName.toUpperCase(Locale.ROOT)
-                .replaceFirst("MINECRAFT:", "").replace('.', '_');
-    }
-
     /**
      * Replaces the sound if needed.
      */
@@ -65,8 +61,6 @@ public class ModuleFixCobwebPlaceSound extends OCMModule {
                 return;
 
             PacketContainer packet = event.getPacket();
-            String soundName;
-
             try {
                 NamespacedKey namespacedKey;
                 if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
@@ -77,7 +71,7 @@ public class ModuleFixCobwebPlaceSound extends OCMModule {
 
                 if (namespacedKey == null) return;
 
-                soundName = getFormattedString(namespacedKey.getKey());
+                String soundName = TextUtils.getFormattedString(namespacedKey.getKey());
                 if (!soundName.equals("BLOCK_COBWEB_PLACE")) return;
 
                 int x = packet.getIntegers().read(0);
@@ -92,7 +86,7 @@ public class ModuleFixCobwebPlaceSound extends OCMModule {
                 event.setCancelled(true);
 
                 player.playSound(loc, Sound.BLOCK_STONE_PLACE, volume, pitch);
-                debug("Replaced cobweb place sound with stone place sound");
+                debug("Replaced cobweb place sound with stone place sound", player);
 
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;

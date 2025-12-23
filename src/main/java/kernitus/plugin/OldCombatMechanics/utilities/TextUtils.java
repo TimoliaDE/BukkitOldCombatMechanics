@@ -7,7 +7,12 @@ package kernitus.plugin.OldCombatMechanics.utilities;
 
 import org.bukkit.ChatColor;
 
+import java.util.Locale;
+
 public class TextUtils {
+
+    private static final String minecraftPrefix = "MINECRAFT:";
+
     /**
      * Converts ampersand (&) color codes to Minecraft ({@link ChatColor#COLOR_CHAR}) color codes.
      *
@@ -26,5 +31,10 @@ public class TextUtils {
      */
     public static String stripColour(String text) {
         return ChatColor.stripColor(text);
+    }
+
+    public static String getFormattedString(String soundName) {
+        String formatted = soundName.toUpperCase(Locale.ROOT).replace('.', '_');
+        return formatted.startsWith(minecraftPrefix) ? formatted.substring(minecraftPrefix.length()) : formatted;
     }
 }
