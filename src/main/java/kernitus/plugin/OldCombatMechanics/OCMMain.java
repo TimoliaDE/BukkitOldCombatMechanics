@@ -294,8 +294,8 @@ public class OCMMain extends JavaPlugin {
             ModuleLoader.addModule(new ModuleFixBlockPlaceSound(this));
             ModuleLoader.addModule(new ModuleFixBucketPlacement(this));
         } else {
-            Messenger.warn("No ViaVersion detected, fix-arrow-sound and fix-block-place-sound modules " +
-                    "will be disabled");
+            Messenger.warn("No ViaVersion detected, fix-arrow-sound, fix-block-place-sound and " +
+                    "fix-bucket-placement modules will be disabled");
         }
     }
 
