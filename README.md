@@ -31,6 +31,6 @@ This plugin requires **Java 21 or higher** and supports the **Minecraft Java Edi
 
 ### ⚠️ Important Note
 Use **only** the JAR file ending with `reobf.jar`:  
-**`OldCombatMechanics-v2.2.0-adapted-reobf.jar`**
+**`OldCombatMechanics-v2.3.0-adapted-reobf.jar`**
 
 Other JAR files in the `build/libs` folder do **not** work properly.

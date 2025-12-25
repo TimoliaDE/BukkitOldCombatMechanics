@@ -9,29 +9,35 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.viaversion.viaversion.api.Via;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import kernitus.plugin.OldCombatMechanics.utilities.SoundUtil;
 import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
-import org.bukkit.Location;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
-import org.bukkit.Sound;
+import org.bukkit.*;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.plugin.Plugin;
 
-import java.util.Locale;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Fixes incorrect cobweb placement sound for 1.8 clients on newer versions
- * by replacing it with the stone place sound.
+ * Fixes incorrect placement sounds for 1.8 clients:
+ * - Cobwebs use the stone sound instead of the leaf sound.
+ * - Fire placed with flint and steel or a fire charge uses the correct item sound
+ *   instead of the wool sound.
  * Requires ViaVersion.
  */
-public class ModuleFixCobwebPlaceSound extends OCMModule {
+public class ModuleFixBlockPlaceSound extends OCMModule {
 
     private final ProtocolManager protocolManager = plugin.getProtocolManager();
     private final SoundListener soundListener = new SoundListener(plugin);
+    private static final Set<UUID> blockedSoundUUIDs = new HashSet<>();
 
-    public ModuleFixCobwebPlaceSound(OCMMain plugin) {
-        super(plugin, "fix-cobweb-place-sound");
+    public ModuleFixBlockPlaceSound(OCMMain plugin) {
+        super(plugin, "fix-block-place-sound");
         reload();
     }
 
@@ -43,15 +49,39 @@ public class ModuleFixCobwebPlaceSound extends OCMModule {
             protocolManager.removePacketListener(soundListener);
     }
 
+    @EventHandler(priority = EventPriority.LOW)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (!isLegacyClient(player)) return;
+
+        Block block = event.getBlockPlaced();
+        Material item = event.getItemInHand().getType();
+
+        if (block.getType() != Material.FIRE) return;
+        if (item != Material.FLINT_AND_STEEL && item != Material.FIRE_CHARGE) return;
+        if (block.getBlockData().getSoundGroup().getPlaceSound() != Sound.BLOCK_WOOL_PLACE) return;
+
+        boolean fireCharge = item == Material.FIRE_CHARGE;
+        String soundName = fireCharge ? "item.firecharge.use" : "item.flintandsteel.use";
+
+        UUID uuid = player.getUniqueId();
+        Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> blockedSoundUUIDs.remove(uuid));
+        blockedSoundUUIDs.add(uuid);
+
+        SoundUtil.playSound(this, block.getLocation(), soundName, SoundCategory.BLOCKS, 1.0F,
+                ThreadLocalRandom.current().nextFloat() * 0.4F + 0.8F);
+    }
+
     /**
      * Replaces the sound if needed.
      */
     private class SoundListener extends PacketAdapter {
 
+        private static final Set<String> fireSoundNames = Set.of("ITEM_FIRECHARGE_USE", "ITEM_FLINTANDSTEEL_USE");
         private boolean disabledDueToError;
 
         public SoundListener(Plugin plugin) {
-            super(plugin, ListenerPriority.HIGH, PacketType.Play.Server.NAMED_SOUND_EFFECT);
+            super(plugin, ListenerPriority.LOWEST, PacketType.Play.Server.NAMED_SOUND_EFFECT);
         }
 
         @Override
@@ -72,6 +102,14 @@ public class ModuleFixCobwebPlaceSound extends OCMModule {
                 if (namespacedKey == null) return;
 
                 String soundName = TextUtils.getFormattedString(namespacedKey.getKey());
+                UUID uuid = player.getUniqueId();
+
+                if (!fireSoundNames.contains(soundName) && blockedSoundUUIDs.remove(uuid)) {
+                    debug("Replaced wool sound with fire sound", player);
+                    event.setCancelled(true);
+                    return;
+                }
+
                 if (!soundName.equals("BLOCK_COBWEB_PLACE")) return;
 
                 int x = packet.getIntegers().read(0);

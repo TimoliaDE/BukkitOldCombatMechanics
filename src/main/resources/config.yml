@@ -35,7 +35,8 @@ modesets:
     - "old-projectile-trajectory"
     - "old-bow-damage"
     - "fix-arrow-sound"
-    - "replace-cobweb-sound"
+    - "fix-block-place-sound"
+    - "fix-bucket-placement"
     - "fix-bow-shoot"
     - "old-fall-damage"
     - "old-water-placement"
@@ -305,9 +306,17 @@ fix-arrow-sound:
   # Requires ViaVersion.
   enabled: true
 
-fix-cobweb-place-sound:
-  # Fixes incorrect cobweb placement sound for 1.8 clients on newer versions
-  # by replacing it with the stone place sound.
+fix-block-place-sound:
+  # Fixes incorrect placement sounds for 1.8 clients:
+  # Cobwebs use the stone sound instead of the leaf sound.
+  # Fire placed with flint and steel or a fire charge uses the correct item sound
+  # instead of the wool sound.
+  # Requires ViaVersion.
+  enabled: true
+
+fix-bucket-placement:
+  # Fixes visible ghost water for 1.8 clients when placing water
+  # slightly outside the normal placement range (at most 1 block).
   # Requires ViaVersion.
   enabled: true
 

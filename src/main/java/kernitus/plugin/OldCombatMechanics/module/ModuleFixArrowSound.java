@@ -1,7 +1,7 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
-import com.viaversion.viaversion.api.Via;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.SoundUtil;
 import org.bukkit.*;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
@@ -24,31 +24,7 @@ public class ModuleFixArrowSound extends OCMModule {
     public void onPlayerPickupArrow(PlayerPickupArrowEvent event) {
         Player player = event.getPlayer();
         Random random = new Random();
-        playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS, 0.2F,
-                ((random.nextFloat() - random.nextFloat()) * 0.7F + 1.0F) * 2.0F);
-    }
-
-    private void playSound(Location loc, Sound sound, SoundCategory category, float volume, float pitch) {
-        World world = loc.getWorld();
-        if (world == null) return;
-
-        world.getPlayers().stream().filter(this::isEnabled)
-                .filter(this::isLegacyClient)
-                .filter(player -> canHear(player, loc))
-                .forEach(player -> player.playSound(loc, sound, category, volume, pitch));
-    }
-
-    /*
-     * Checks whether the player is using a 1.8 client or below.
-     */
-    private boolean isLegacyClient(Player player) {
-        return Via.getAPI().getPlayerVersion(player) <= 47;
-    }
-
-    private boolean canHear(Player player, Location loc) {
-        if (!player.getWorld().equals(loc.getWorld())) return false;
-
-        final double soundDistanceSquared = 16 * 16;
-        return player.getLocation().distanceSquared(loc) <= soundDistanceSquared;
+        SoundUtil.playSound(this, player.getLocation(), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS,
+                0.2F, ((random.nextFloat() - random.nextFloat()) * 0.7F + 1.0F) * 2.0F);
     }
 }

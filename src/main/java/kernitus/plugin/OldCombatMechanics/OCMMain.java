@@ -291,9 +291,10 @@ public class OCMMain extends JavaPlugin {
         // These modules require ViaVersion
         if (hasViaVersion) {
             ModuleLoader.addModule(new ModuleFixArrowSound(this));
-            ModuleLoader.addModule(new ModuleFixCobwebPlaceSound(this));
+            ModuleLoader.addModule(new ModuleFixBlockPlaceSound(this));
+            ModuleLoader.addModule(new ModuleFixBucketPlacement(this));
         } else {
-            Messenger.warn("No ViaVersion detected, fix-arrow-sound and fix-cobweb-place-sound modules " +
+            Messenger.warn("No ViaVersion detected, fix-arrow-sound and fix-block-place-sound modules " +
                     "will be disabled");
         }
     }
