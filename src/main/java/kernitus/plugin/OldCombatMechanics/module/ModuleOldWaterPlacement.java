@@ -1,71 +1,74 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import org.bukkit.GameMode;
-import org.bukkit.Material;
+import kernitus.plugin.OldCombatMechanics.utilities.BucketUtil;
+import kernitus.plugin.OldCombatMechanics.versions.BlockUtil;
+import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Waterlogged;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.Set;
-
-import static org.bukkit.block.BlockFace.*;
+import org.bukkit.inventory.PlayerInventory;
 
 /**
- *  This matches the old water placement in 1.8 by placing the water next to
- *  the waterlogged block instead of directly on it.
+ * This matches the old water placement in 1.8 by placing the water
+ * next to the waterlogged block instead of directly on it.
+ * When using ViaVersion, this behavior is only applied to 1.9+ clients.
  */
 public class ModuleOldWaterPlacement extends OCMModule {
-
-    private static final Set<BlockFace> faces = Set.of(NORTH, SOUTH, WEST, EAST, DOWN);
 
     public ModuleOldWaterPlacement(OCMMain plugin) {
         super(plugin, "old-water-placement");
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
-    public void handlePlayerBucketEmpty(PlayerBucketEmptyEvent event) {
+    @EventHandler(priority = EventPriority.LOW)
+    public void onPlayerBucketEmpty(PlayerBucketEmptyEvent event) {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
         if (event.isCancelled()) return;
 
-        Block block = event.getBlock();
-        boolean usingWater = event.getBucket() == Material.WATER_BUCKET;
-        boolean isWaterlogged = block.getBlockData() instanceof Waterlogged;
-        boolean hasOffset = usingWater && isWaterlogged && block.getType() != Material.LIGHT;
+        Block clicked = event.getBlockClicked();
 
-        // The following if-Blocks considers that no block can be placed on water
+        // Cauldrons handle water placement differently and should be ignored
+        if (Tag.CAULDRONS.isTagged(clicked.getType())) return;
 
-        if (hasOffset) {
-            Block relBlock = block.getRelative(event.getBlockFace());
+        BlockFace clickedFace = event.getBlockFace();
+        Block target = clicked.isReplaceable() ? clicked : clicked.getRelative(clickedFace);
+
+        // Prevent placing water directly into non-waterlogged waterloggable blocks
+        if (isWaterloggableAndNotWaterlogged(target, true)) {
             event.setCancelled(true);
+            return;
+        }
 
-            if (relBlock.isEmpty() || relBlock.getType() == Material.LIGHT) {
-                relBlock.setType(Material.WATER, true);
-                clearAdjacentLightBlocks(relBlock);
+        if (!plugin.hasViaVersion() && ViaVersionUtil.isLegacyClient(player)) return;
 
-                ItemStack iStack = event.getItemStack();
-                if (iStack != null && player.getGameMode() != GameMode.CREATIVE) {
-                    iStack.setType(Material.BUCKET);
-                    // This method is used instead of "setItemStack" because the event is cancelled
-                    player.getInventory().setItem(event.getHand(), iStack);
-                }
+        // Apply old 1.8 behavior for modern clients
+        if (isWaterloggableAndNotWaterlogged(clicked, false) && BlockUtil.canPlaceFluid(target)) {
+            event.setCancelled(true);
+            target.setType(Material.WATER, true);
+            BlockUtil.clearAdjacentLightBlocks(target);
+
+            EquipmentSlot hand = event.getHand();
+            PlayerInventory inv = player.getInventory();
+            ItemStack bucket = inv.getItem(hand);
+
+            BucketUtil.giveEmptyBucket(player, hand, bucket);
+
+            if (BucketUtil.isAnimalBucket(bucket)) {
+                BucketUtil.spawnAquaticMob(bucket, target);
             }
         }
     }
 
-    // This method is useful to make water flow correctly for worlds with many light blocks
-    private void clearAdjacentLightBlocks(Block block) {
-        faces.forEach(face -> {
-            Block relBlock = block.getRelative(face);
-
-            if (relBlock.getType() == Material.LIGHT)
-                relBlock.setType(Material.AIR, false);
-        });
+    private boolean isWaterloggableAndNotWaterlogged(Block block, boolean checkWaterState) {
+        return block.getBlockData() instanceof Waterlogged waterlogged && block.getType() != Material.LIGHT
+                && (!checkWaterState || !waterlogged.isWaterlogged());
     }
 }

@@ -184,7 +184,7 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
             weaknessLevel = 0;
         }
 
-        weaknessModifier = weaknessLevel * -4;
+        weaknessModifier = weaknessLevel * 4;
 
         debug(livingDamager, "Weakness Modifier: " + weaknessModifier);
 

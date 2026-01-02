@@ -5,39 +5,31 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.viaversion.viaversion.api.Via;
 import kernitus.plugin.OldCombatMechanics.module.OCMModule;
+import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
+import java.util.UUID;
+import java.util.function.Consumer;
+
 public class SoundUtil {
 
-//    public static void playSound(Player player, Location loc, Sound sound,
-//                                 SoundCategory source, float volume, float pitch) {
-////        Holder<SoundEvent> x = CraftSound.bukkitToMinecraftHolder(sound);
-////        Holder<SoundEvent> holder = Holder.direct(hold);
-////
-////        player.playSound();
-//        ServerPlayer serverPlayer = ((CraftPlayer) player).getHandle();
-//        long randomLong = serverPlayer.random.nextLong();
-////        SoundSource source = SoundSource.valueOf(category.name());
-//
-//        serverPlayer.connection.send(new ClientboundSoundPacket(holder, sound, source,
-//                loc.getX(), loc.getY(), loc.getZ(), volume, pitch, randomLong));
-//    }
-
     public static void playSound(OCMModule module, Location loc, String soundName, SoundCategory category,
-                                 float volume, float pitch) {
+                                 float volume, float pitch, Consumer<UUID> prepareFunction) {
         World world = loc.getWorld();
         if (world == null) return;
 
         world.getPlayers().stream().filter(module::isEnabled)
-                .filter(SoundUtil::isLegacyClient)
+                .filter(ViaVersionUtil::isLegacyClient)
                 .filter(player -> canHear(player, loc))
-                .forEach(player -> player.playSound(loc, soundName, category, volume, pitch));
+                .forEach(player -> {
+                    prepareFunction.accept(player.getUniqueId());
+                    player.playSound(loc, soundName, category, volume, pitch);
+                });
     }
 
     public static void playSound(OCMModule module, Location loc, Sound sound, SoundCategory category,
@@ -46,16 +38,9 @@ public class SoundUtil {
         if (world == null) return;
 
         world.getPlayers().stream().filter(module::isEnabled)
-                .filter(SoundUtil::isLegacyClient)
+                .filter(ViaVersionUtil::isLegacyClient)
                 .filter(player -> canHear(player, loc))
                 .forEach(player -> playSound(player, loc, sound, category, volume, pitch));
-    }
-
-    /*
-     * Checks whether the player is using a 1.8 client or below.
-     */
-    private static boolean isLegacyClient(Player player) {
-        return Via.getAPI().getPlayerVersion(player) <= 47;
     }
 
     private static boolean canHear(Player player, Location loc) {

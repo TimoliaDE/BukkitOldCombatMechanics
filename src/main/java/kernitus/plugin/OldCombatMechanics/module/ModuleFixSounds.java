@@ -6,38 +6,44 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import com.viaversion.viaversion.api.Via;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.utilities.SoundUtil;
 import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
+import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerPickupArrowEvent;
 import org.bukkit.plugin.Plugin;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Fixes incorrect placement sounds for 1.8 clients:
- * - Cobwebs use the stone sound instead of the leaf sound.
- * - Fire placed with flint and steel or a fire charge uses the correct item sound
- *   instead of the wool sound.
+ * Fixes several incorrect sound mappings for 1.8 clients:
+ * - Cobwebs incorrectly play the stone sound instead of the leaf sound
+ *   when placed.
+ * - Fire placed using flint and steel or a fire charge plays the correct
+ *   item sound instead of the wool sound.
+ * - Replaces the incorrect "minecraft:music.disc.ward" sound with the
+ *   correct "minecraft:ui.button.click" sound.
+ * - Adds the missing arrow pickup sound.
+ *
  * Requires ViaVersion.
  */
-public class ModuleFixBlockPlaceSound extends OCMModule {
+public class ModuleFixSounds extends OCMModule {
 
     private final ProtocolManager protocolManager = plugin.getProtocolManager();
     private final SoundListener soundListener = new SoundListener(plugin);
     private static final Set<UUID> blockedSoundUUIDs = new HashSet<>();
 
-    public ModuleFixBlockPlaceSound(OCMMain plugin) {
-        super(plugin, "fix-block-place-sound");
+    public ModuleFixSounds(OCMMain plugin) {
+        super(plugin, "fix-sounds");
         reload();
     }
 
@@ -49,11 +55,16 @@ public class ModuleFixBlockPlaceSound extends OCMModule {
             protocolManager.removePacketListener(soundListener);
     }
 
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerPickupArrow(PlayerPickupArrowEvent event) {
+        Player player = event.getPlayer();
+        Random random = new Random();
+        SoundUtil.playSound(this, player.getLocation(), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS,
+                0.2F, ((random.nextFloat() - random.nextFloat()) * 0.7F + 1.0F) * 2.0F);
+    }
+
     @EventHandler(priority = EventPriority.LOW)
     public void onBlockPlace(BlockPlaceEvent event) {
-        Player player = event.getPlayer();
-        if (!isLegacyClient(player)) return;
-
         Block block = event.getBlockPlaced();
         Material item = event.getItemInHand().getType();
 
@@ -62,14 +73,13 @@ public class ModuleFixBlockPlaceSound extends OCMModule {
         if (block.getBlockData().getSoundGroup().getPlaceSound() != Sound.BLOCK_WOOL_PLACE) return;
 
         boolean fireCharge = item == Material.FIRE_CHARGE;
-        String soundName = fireCharge ? "item.firecharge.use" : "item.flintandsteel.use";
-
-        UUID uuid = player.getUniqueId();
-        Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> blockedSoundUUIDs.remove(uuid));
-        blockedSoundUUIDs.add(uuid);
+        String soundName = fireCharge ? "minecraft:item.firecharge.use" : "minecraft:item.flintandsteel.use";
 
         SoundUtil.playSound(this, block.getLocation(), soundName, SoundCategory.BLOCKS, 1.0F,
-                ThreadLocalRandom.current().nextFloat() * 0.4F + 0.8F);
+                ThreadLocalRandom.current().nextFloat() * 0.4F + 0.8F, uuid -> {
+                    Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> blockedSoundUUIDs.remove(uuid));
+                    blockedSoundUUIDs.add(uuid);
+                });
     }
 
     /**
@@ -87,8 +97,10 @@ public class ModuleFixBlockPlaceSound extends OCMModule {
         @Override
         public void onPacketSending(PacketEvent event) {
             Player player = event.getPlayer();
-            if (disabledDueToError || event.isCancelled() || !isLegacyClient(player) || !isEnabled(player.getWorld()))
+            if (disabledDueToError || event.isCancelled() || !ViaVersionUtil.isLegacyClient(player) ||
+                    !isEnabled(player.getWorld())) {
                 return;
+            }
 
             PacketContainer packet = event.getPacket();
             try {
@@ -110,7 +122,9 @@ public class ModuleFixBlockPlaceSound extends OCMModule {
                     return;
                 }
 
-                if (!soundName.equals("BLOCK_COBWEB_PLACE")) return;
+                boolean cobwebPlaceSound = soundName.equals("BLOCK_COBWEB_PLACE");
+                boolean uiButtonClick = soundName.equals("UI_BUTTON_CLICK");
+                if (!cobwebPlaceSound && !uiButtonClick) return;
 
                 int x = packet.getIntegers().read(0);
                 int y = packet.getIntegers().read(1);
@@ -123,20 +137,19 @@ public class ModuleFixBlockPlaceSound extends OCMModule {
 
                 event.setCancelled(true);
 
-                player.playSound(loc, Sound.BLOCK_STONE_PLACE, volume, pitch);
-                debug("Replaced cobweb place sound with stone place sound", player);
+                if (cobwebPlaceSound) {
+                    player.playSound(loc, Sound.BLOCK_STONE_PLACE, volume, pitch);
+                    debug("Replaced cobweb place sound with stone place sound", player);
+
+                } else {
+                    player.playSound(loc, "minecraft:ui.button.click", volume, pitch);
+                    debug("Replaced music disc ward sound with ui button click sound", player);
+                }
 
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
                 Messenger.warn(e, "Error detecting named sound effect packets.");
             }
         }
-    }
-
-    /*
-     * Checks whether the player is using a 1.8 client or below.
-     */
-    private boolean isLegacyClient(Player player) {
-        return Via.getAPI().getPlayerVersion(player) <= 47;
     }
 }

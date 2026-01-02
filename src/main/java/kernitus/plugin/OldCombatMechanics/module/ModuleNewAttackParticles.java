@@ -77,6 +77,7 @@ public class ModuleNewAttackParticles extends OCMModule {
                     debug("Cancelled " + (isSweepParticle ? "sweep" : "damage indicator") + " particles",
                             player);
                 }
+
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
                 Messenger.warn(e, "Error detecting sweep or damage indicator packets. " +
