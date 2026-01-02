@@ -13,6 +13,9 @@ The following options have been added to the config
 - `old-projectile-trajectory`
 - `no-deflect-fire-projectile`
 - `old-bow-damage`
+- `fix-sounds`
+- `fix-bucket-placement`
+- `fix-block-break`
 - `fix-bow-shoot`
 - `old-fall-damage`
 - `old-water-placement`
@@ -27,7 +30,7 @@ In addition, the default values for the following config options have been adjus
 - `old-player-regen`
 - `projectile-knockback`
 
-This plugin requires **Java 21 or higher** and supports the **Minecraft Java Edition** versions **1.20.2–1.21.10**.
+This plugin requires **Java 21 or higher** and supports the **Minecraft Java Edition** versions **1.20.2–1.21.11**.
 
 ### ⚠️ Important Note
 Use **only** the JAR file ending with `reobf.jar`:  

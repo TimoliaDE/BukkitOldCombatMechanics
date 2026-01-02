@@ -34,9 +34,10 @@ modesets:
     - "old-player-knockback"
     - "old-projectile-trajectory"
     - "old-bow-damage"
-    - "fix-arrow-sound"
-    - "fix-block-place-sound"
+    - "fix-sounds"
+    - "fix-attack-range"
     - "fix-bucket-placement"
+    - "fix-block-break"
     - "fix-bow-shoot"
     - "old-fall-damage"
     - "old-water-placement"
@@ -300,23 +301,27 @@ old-bow-damage:
   # where damage depends on the arrow’s velocity.
   includeCrossbow: false
 
-fix-arrow-sound:
-  # Fixes missing arrow pickup sound for 1.8 clients on newer versions
-  # (likely caused by ViaVersion).
-  # Requires ViaVersion.
-  enabled: true
-
-fix-block-place-sound:
+fix-sounds:
   # Fixes incorrect placement sounds for 1.8 clients:
   # Cobwebs use the stone sound instead of the leaf sound.
-  # Fire placed with flint and steel or a fire charge uses the correct item sound
-  # instead of the wool sound.
+  # Fire placed with flint and steel or a fire charge uses the
+  # correct item sound instead of the wool sound.
+  # Applies the correct "minecraft:ui.button.click" sound when played,
+  # replacing the incorrect "minecraft:music.disc.ward" sound.
   # Requires ViaVersion.
   enabled: true
 
 fix-bucket-placement:
-  # Fixes visible ghost water for 1.8 clients when placing water
-  # slightly outside the normal placement range (at most 1 block).
+  # Fixes visible ghost water for 1.8 clients when placing
+  # water slightly outside the normal placement range.
+  # Also corrects water placement one block away from the
+  # intended block, especially while sneaking on 1.8 clients.
+  # Requires ViaVersion.
+  enabled: true
+
+fix-block-break:
+  # Prevents removed ghost blocks from appearing for
+  # 1.8 clients when a block break action is cancelled.
   # Requires ViaVersion.
   enabled: true
 
@@ -335,8 +340,9 @@ old-fall-damage:
   safeFallDistance: 2.834627
 
 old-water-placement:
-  # This matches the old water placement in 1.8 by placing the water next to
-  # the waterlogged block instead of directly on it.
+  # This matches the old water placement in 1.8 by placing the water
+  # next to the waterlogged block instead of directly on it.
+  # When using ViaVersion, this behavior is only applied to 1.9+ clients.
   enabled: true
 
 damage-inside-wall:

@@ -285,18 +285,20 @@ public class OCMMain extends JavaPlugin {
                     "will be disabled");
         }
 
-        @Nullable Plugin plugin = getServer().getPluginManager().getPlugin("ViaVersion");
-        boolean hasViaVersion = plugin != null && plugin.isEnabled();
-
         // These modules require ViaVersion
-        if (hasViaVersion) {
-            ModuleLoader.addModule(new ModuleFixArrowSound(this));
-            ModuleLoader.addModule(new ModuleFixBlockPlaceSound(this));
+        if (hasViaVersion()) {
+            ModuleLoader.addModule(new ModuleFixSounds(this));
             ModuleLoader.addModule(new ModuleFixBucketPlacement(this));
+            ModuleLoader.addModule(new ModuleFixBlockBreak(this));
         } else {
-            Messenger.warn("No ViaVersion detected, fix-arrow-sound, fix-block-place-sound and " +
-                    "fix-bucket-placement modules will be disabled");
+            Messenger.warn("No ViaVersion detected, fix-sounds, fix-bucket-placement and " +
+                    "fix-block-break modules will be disabled");
         }
+    }
+
+    public boolean hasViaVersion() {
+        @Nullable Plugin plugin = getServer().getPluginManager().getPlugin("ViaVersion");
+        return plugin != null && plugin.isEnabled();
     }
 
     public void registerCommand(String name, Object executor, Object completer, List<String> aliases) {

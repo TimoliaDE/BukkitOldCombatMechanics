@@ -167,7 +167,7 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
         hasWeakness = weaknessAmplifier.isPresent() && (weaknessAmplifier.get() == -1 || weaknessAmplifier.get() == 0);
         weaknessLevel = weaknessAmplifier.orElse(-1) + 1;
 
-        weaknessModifier = weaknessLevel * -4;
+        weaknessModifier = weaknessLevel * 4;
 
         debug(livingDamager, "Weakness Modifier: " + weaknessModifier);
 
