@@ -111,9 +111,11 @@ public class ModuleFixBucketPlacement extends OCMModule {
         if (!isSourceFluid(target)) return;
 
         event.setCancelled(true);
-        BucketUtil.giveFilledBucket(player, event.getHand(), item, bucket);
 
         Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> {
+            // The following method should be within this task because otherwise
+            // when the player sneaks, the water is replaced again
+            BucketUtil.giveFilledBucket(player, event.getHand(), item, bucket);
             target.setType(Material.AIR, true);
             BlockUtil.removeGhostAirAndFluid(player, target);
         });
