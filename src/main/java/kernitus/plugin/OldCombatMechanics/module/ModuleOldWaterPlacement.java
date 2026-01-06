@@ -47,7 +47,7 @@ public class ModuleOldWaterPlacement extends OCMModule {
             return;
         }
 
-        if (!plugin.hasViaVersion() && ViaVersionUtil.isLegacyClient(player)) return;
+        if (plugin.hasViaVersion() && ViaVersionUtil.isLegacyClient(player)) return;
 
         // Apply old 1.8 behavior for modern clients
         if (isWaterloggableAndNotWaterlogged(clicked, false) && BlockUtil.canPlaceFluid(target)) {
