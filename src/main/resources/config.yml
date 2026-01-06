@@ -10,6 +10,12 @@
 #                                                                           #
 # ###########################################################################
 
+# NOTE: Timolia uses mostly vanilla 1.8 PvP values,
+# but some differ from the original behavior.
+# To replicate exact vanilla 1.8 PvP behavior, use the following values:
+# old-player-knockback: knockback-extra-ranged-horizontal = 0.6
+# old-golden-apples: duration = 30
+
 modesets:
   # Modesets are lists of modules that are enabled for a player in that mode.
   # Modules not listed in any modeset are assumed to always be available.
@@ -262,7 +268,7 @@ old-player-knockback:
   # Increase to make clicking less important, decrease to make clicking more important
   knockback-extra-melee-vertical: 0.1
   # The horizontal knockback from ranged attacks is usually a bit higher than that of melee attacks.
-  knockback-extra-ranged-horizontal: 0.6
+  knockback-extra-ranged-horizontal: 0.5 # use 0.6 for exact 1.8 PvP
   knockback-extra-ranged-vertical: 0.1
   # Whether to stop sprinting when dealing extra knockback
   disable-sprinting: true
@@ -435,7 +441,7 @@ old-golden-apples:
   # Potion effects for enchanted golden apples
   enchanted-golden-apple-effects:
     regeneration:
-      duration: 30
+      duration: 15 # use 30 for exact 1.8 PvP
       amplifier: 4
     resistance:
       duration: 300
