@@ -17,11 +17,6 @@ public class BlockUtil {
 
     private static final Set<BlockFace> faces = Set.of(NORTH, SOUTH, WEST, EAST, DOWN);
 
-    public static boolean canPlaceFluid(Block target) {
-        Material targetType = target.getType();
-        return target.isReplaceable() || target.isEmpty() || targetType == Material.LIGHT;
-    }
-
     // This method is useful to make water flow correctly for worlds with many light blocks
     public static void clearAdjacentLightBlocks(Block block) {
         faces.forEach(face -> {
@@ -42,45 +37,21 @@ public class BlockUtil {
         player.sendBlockChange(block.getLocation(), data);
     }
 
-    public static void removeGhostAir(Player player, Block block) {
-        updateNearbyBlocks(player, block, true, false);
-
-        // Run again next tick to ensure correct water flow updates
-        Bukkit.getScheduler().runTask(OCMMain.getInstance(),
-                () -> updateNearbyBlocks(player, block, true, false));
-    }
-
-    public static void removeGhostFluid(Player player, Block block) {
-        updateNearbyBlocks(player, block, false, true);
-
-        // Run again next tick to ensure correct water flow updates
-//        Bukkit.getScheduler().runTask(OCMMain.getInstance(),
-//                () -> updateNearbyBlocks(player, block, false, true));
-    }
-
     public static void removeGhostAirAndFluid(Player player, Block block) {
-        updateNearbyBlocks(player, block, true, true);
-
-        // Run again next tick to ensure correct water flow updates
-//        Bukkit.getScheduler().runTask(OCMMain.getInstance(),
-//                () -> updateNearbyBlocks(player, block, true, true));
+        updateNearbyBlocks(player, block);
     }
 
     /**
      * Removes ghost air and ghost fluid from all blocks in a 7x7x7 area
      * around the given block by forcing block data updates.
      */
-    private static void updateNearbyBlocks(Player player, Block block, boolean air, boolean fluid) {
+    private static void updateNearbyBlocks(Player player, Block block) {
         for (int x = -2; x <= 2; x++) {
             for (int y = -2; y <= 2; y++) {
                 for (int z = -2; z <= 2; z++) {
                     Block adjacent = block.getRelative(x, y, z);
-                    if (air) {
-                        ModuleOldBucketPlacement.fixAir(player, adjacent);
-                    }
-                    if (fluid) {
-                        ModuleOldBucketPlacement.fixFluid(player, adjacent);
-                    }
+                    ModuleOldBucketPlacement.fixAir(player, adjacent);
+                    ModuleOldBucketPlacement.fixFluid(player, adjacent);
                 }
             }
         }
