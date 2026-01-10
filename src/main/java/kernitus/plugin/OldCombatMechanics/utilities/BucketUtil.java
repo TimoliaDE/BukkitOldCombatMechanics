@@ -1,10 +1,8 @@
 package kernitus.plugin.OldCombatMechanics.utilities;
 
+import kernitus.plugin.OldCombatMechanics.OCMMain;
 import net.minecraft.server.level.ServerPlayer;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.craftbukkit.entity.CraftMob;
@@ -14,6 +12,7 @@ import org.bukkit.entity.*;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.AxolotlBucketMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.TropicalFishBucketMeta;
@@ -30,29 +29,59 @@ public class BucketUtil {
                 type == Material.SALMON_BUCKET || type == Material.TADPOLE_BUCKET;
     }
 
-    public static void giveEmptyBucket(Player player, EquipmentSlot hand, ItemStack item) {
-        if (player.getGameMode() == GameMode.CREATIVE) return;
+    public static void giveEmptyBucket(Player player, EquipmentSlot hand, ItemStack item, boolean withDelay) {
+        PlayerInventory inv = player.getInventory();
+        if (player.getGameMode() == GameMode.CREATIVE) {
+            if (withDelay) {
+                inv.setItem(hand, null);
+                Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> inv.setItem(hand, item));
+            }
+
+            return;
+        }
+
+        if (withDelay) {
+            inv.setItem(hand, null);
+
+            Bukkit.getScheduler().runTask(OCMMain.getInstance(), () ->
+                    giveEmptyBucket(player, hand, item, false));
+            return;
+        }
 
         ItemStack emptyBucket = new ItemStack(Material.BUCKET);
+
         if (item.getAmount() <= 1) {
-            player.getInventory().setItem(hand, emptyBucket);
+            inv.setItem(hand, emptyBucket);
 
         } else {
             item.setAmount(item.getAmount() - 1);
+            inv.setItem(hand, item);
             ServerPlayer sp = ((CraftPlayer) player).getHandle();
             sp.getInventory().placeItemBackInInventory(CraftItemStack.asNMSCopy(emptyBucket));
         }
     }
 
-    public static void giveFilledBucket(Player player, EquipmentSlot hand, ItemStack item, Material bucket) {
+    public static void giveFilledBucket(Player player, EquipmentSlot hand, ItemStack item, Material bucket,
+                                        boolean withDelay) {
         if (player.getGameMode() == GameMode.CREATIVE) return;
 
+        PlayerInventory inv = player.getInventory();
+        if (withDelay) {
+            inv.setItem(hand, null);
+
+            Bukkit.getScheduler().runTask(OCMMain.getInstance(), () ->
+                    giveFilledBucket(player, hand, item, bucket, false));
+            return;
+        }
+
         ItemStack filledBucket = new ItemStack(bucket);
+
         if (item.getAmount() <= 1) {
-            player.getInventory().setItem(hand, filledBucket);
+            inv.setItem(hand, filledBucket);
 
         } else {
             item.setAmount(item.getAmount() - 1);
+            inv.setItem(hand, item);
             ServerPlayer sp = ((CraftPlayer) player).getHandle();
             sp.getInventory().placeItemBackInInventory(CraftItemStack.asNMSCopy(filledBucket));
         }
