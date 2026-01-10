@@ -261,7 +261,7 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleOldBowDamage(this));
         ModuleLoader.addModule(new ModuleFixBowShoot(this));
         ModuleLoader.addModule(new ModuleOldFallDamage(this));
-        ModuleLoader.addModule(new ModuleOldWaterPlacement(this));
+        ModuleLoader.addModule(new ModuleOldBucketPlacement(this));
         ModuleLoader.addModule(new ModuleDamageInsideWall(this));
         ModuleLoader.addModule(new ModulePlayerRegen(this));
 
@@ -288,11 +288,10 @@ public class OCMMain extends JavaPlugin {
         // These modules require ViaVersion
         if (hasViaVersion()) {
             ModuleLoader.addModule(new ModuleFixSounds(this));
-            ModuleLoader.addModule(new ModuleFixBucketPlacement(this));
             ModuleLoader.addModule(new ModuleFixBlockBreak(this));
         } else {
-            Messenger.warn("No ViaVersion detected, fix-sounds, fix-bucket-placement and " +
-                    "fix-block-break modules will be disabled");
+            Messenger.warn("No ViaVersion detected, fix-sounds and fix-block-break modules " +
+                    "will be disabled");
         }
     }
 

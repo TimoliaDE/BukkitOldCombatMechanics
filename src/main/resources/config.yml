@@ -42,11 +42,10 @@ modesets:
     - "old-bow-damage"
     - "fix-sounds"
     - "fix-attack-range"
-    - "fix-bucket-placement"
     - "fix-block-break"
     - "fix-bow-shoot"
     - "old-fall-damage"
-    - "old-water-placement"
+    - "old-bucket-placement"
     - "damage-inside-wall"
     - "old-fishing-knockback"
     - "fishing-rod-velocity"
@@ -57,6 +56,7 @@ modesets:
     - "disable-offhand"
     - "old-brewing-stand"
     - "disable-enderpearl-cooldown"
+    - "disable-projectile-randomness"
     - "chorus-fruit"
     - "old-burn-delay"
     - "disable-attack-sounds"
@@ -317,14 +317,6 @@ fix-sounds:
   # Requires ViaVersion.
   enabled: true
 
-fix-bucket-placement:
-  # Fixes visible ghost water for 1.8 clients when placing
-  # water slightly outside the normal placement range.
-  # Also corrects water placement one block away from the
-  # intended block, especially while sneaking on 1.8 clients.
-  # Requires ViaVersion.
-  enabled: true
-
 fix-block-break:
   # Prevents removed ghost blocks from appearing for
   # 1.8 clients when a block break action is cancelled.
@@ -345,10 +337,10 @@ old-fall-damage:
   # a player can fall without taking any damage.
   safeFallDistance: 2.834627
 
-old-water-placement:
-  # This matches the old water placement in 1.8 by placing the water
-  # next to the waterlogged block instead of directly on it.
-  # When using ViaVersion, this behavior is only applied to 1.9+ clients.
+old-bucket-placement:
+  # Matches water placement behavior of version 1.8 by placing water
+  # next to a waterlogged block instead of directly on it.
+  # Also fixes water placement for 1.8 clients when using newer server versions.
   enabled: true
 
 damage-inside-wall:

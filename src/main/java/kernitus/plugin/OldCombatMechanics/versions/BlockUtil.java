@@ -1,7 +1,7 @@
 package kernitus.plugin.OldCombatMechanics.versions;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import kernitus.plugin.OldCombatMechanics.module.ModuleFixBucketPlacement;
+import kernitus.plugin.OldCombatMechanics.module.ModuleOldBucketPlacement;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -42,24 +42,45 @@ public class BlockUtil {
         player.sendBlockChange(block.getLocation(), data);
     }
 
-    public static void removeGhostAirAndFluid(Player player, Block block) {
-        updateNearbyBlocks(player, block);
+    public static void removeGhostAir(Player player, Block block) {
+        updateNearbyBlocks(player, block, true, false);
 
         // Run again next tick to ensure correct water flow updates
-        Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> updateNearbyBlocks(player, block));
+        Bukkit.getScheduler().runTask(OCMMain.getInstance(),
+                () -> updateNearbyBlocks(player, block, true, false));
+    }
+
+    public static void removeGhostFluid(Player player, Block block) {
+        updateNearbyBlocks(player, block, false, true);
+
+        // Run again next tick to ensure correct water flow updates
+//        Bukkit.getScheduler().runTask(OCMMain.getInstance(),
+//                () -> updateNearbyBlocks(player, block, false, true));
+    }
+
+    public static void removeGhostAirAndFluid(Player player, Block block) {
+        updateNearbyBlocks(player, block, true, true);
+
+        // Run again next tick to ensure correct water flow updates
+//        Bukkit.getScheduler().runTask(OCMMain.getInstance(),
+//                () -> updateNearbyBlocks(player, block, true, true));
     }
 
     /**
-     * Removes ghost air and ghost fluid from all blocks in a 5x5x5 area
+     * Removes ghost air and ghost fluid from all blocks in a 7x7x7 area
      * around the given block by forcing block data updates.
      */
-    private static void updateNearbyBlocks(Player player, Block block) {
+    private static void updateNearbyBlocks(Player player, Block block, boolean air, boolean fluid) {
         for (int x = -2; x <= 2; x++) {
             for (int y = -2; y <= 2; y++) {
                 for (int z = -2; z <= 2; z++) {
                     Block adjacent = block.getRelative(x, y, z);
-                    ModuleFixBucketPlacement.fixAir(player, adjacent);
-                    ModuleFixBucketPlacement.fixFluid(player, adjacent);
+                    if (air) {
+                        ModuleOldBucketPlacement.fixAir(player, adjacent);
+                    }
+                    if (fluid) {
+                        ModuleOldBucketPlacement.fixFluid(player, adjacent);
+                    }
                 }
             }
         }
