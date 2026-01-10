@@ -32,6 +32,7 @@ public class BucketUtil {
     public static void giveEmptyBucket(Player player, EquipmentSlot hand, ItemStack item, boolean withDelay) {
         PlayerInventory inv = player.getInventory();
         if (player.getGameMode() == GameMode.CREATIVE) {
+            // Re-adding the item in the next tick prevents duplicate water placement
             if (withDelay) {
                 inv.setItem(hand, null);
                 Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> inv.setItem(hand, item));

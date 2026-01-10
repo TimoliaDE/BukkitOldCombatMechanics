@@ -81,18 +81,13 @@ public class ModuleOldBucketPlacement extends OCMModule {
         ItemStack filledBucket = filledBuckets.remove(uuid);
         EquipmentSlot hand = event.getHand();
 
-        System.out.println("____________________________________________");
-        System.out.println("Aktion: " + event.getAction() + "; " + System.currentTimeMillis());
-
         if (filledBucket != null) {
-            System.out.println("filledBucket removed");
             BucketUtil.giveEmptyBucket(player, hand, filledBucket, true);
             return;
         }
 
         Pair<ItemStack, Material> emptyBucket = emptyBuckets.remove(uuid);
         if (emptyBucket != null) {
-            System.out.println("emptyBucket removed");
             BucketUtil.giveFilledBucket(player, hand, emptyBucket.getFirst(), emptyBucket.getSecond(), true);
             return;
         }
@@ -103,21 +98,8 @@ public class ModuleOldBucketPlacement extends OCMModule {
 
         if (usedFilled || usedEmpty) {
             Block target = getSelectedTarget(event, clicked);
-            System.out.println(usedFilled ? "filled" : "empty");
-            if (target != null) {
-                System.out.println("Target: " + target.getX() + " " + target.getY() + " " + target.getZ());
-            } else {
-                System.out.println("No target");
-            }
-//            try {
-//                int i = 1 / 0;
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
 
             if (target == null) return;
-
-            System.out.println("usedFilled: " + usedFilled);
 
             if (usedFilled) {
                 handleFilledBucket(event, target);

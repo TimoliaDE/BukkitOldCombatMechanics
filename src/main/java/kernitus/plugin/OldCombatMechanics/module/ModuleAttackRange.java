@@ -122,6 +122,7 @@ public class ModuleAttackRange extends OCMModule implements Listener {
     }
 
     private void cleanHand(Player player, int slot) {
+        if (!supported) return;
         ItemStack old = player.getInventory().getItem(slot);
         stripComponent(old);
     }
@@ -136,6 +137,7 @@ public class ModuleAttackRange extends OCMModule implements Listener {
     }
 
     private void stripComponent(ItemStack item) {
+        if (!supported) return;
         if (item == null) return;
         paperAdapter.clear(item);
     }
@@ -209,7 +211,7 @@ public class ModuleAttackRange extends OCMModule implements Listener {
             mobFactorSetter = builder.getMethod("mobFactor", float.class);
             buildMethod = builder.getMethod("build");
             Class<?> typeClass = dct.getField("ATTACK_RANGE").getType();
-            itemSetData = ItemStack.class.getMethod("setData", typeClass, ar);
+            itemSetData = ItemStack.class.getMethod("setData", typeClass, Object.class);
             itemHasData = ItemStack.class.getMethod("hasData", Class.forName("io.papermc.paper.datacomponent.DataComponentType"));
             itemUnsetData = ItemStack.class.getMethod("unsetData", Class.forName("io.papermc.paper.datacomponent.DataComponentType"));
         }

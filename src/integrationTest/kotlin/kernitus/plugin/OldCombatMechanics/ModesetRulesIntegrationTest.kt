@@ -37,7 +37,7 @@ class ModesetRulesIntegrationTest : FunSpec({
     )
     val optionalModules = setOf(
         "disable-attack-sounds",
-        "disable-sword-sweep-particles"
+        "disable-new-attack-particles"
     )
 
     lateinit var player: Player

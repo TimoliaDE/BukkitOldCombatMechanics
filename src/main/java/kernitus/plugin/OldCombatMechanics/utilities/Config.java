@@ -33,7 +33,7 @@ public class Config {
     private static final Set<String> disabledModules = new HashSet<>();
     private static final Set<String> optionalModules = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "disable-attack-sounds",
-            "disable-sword-sweep-particles"
+            "disable-new-attack-particles"
     )));
     private static final Set<String> internalModules = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "modeset-listener",

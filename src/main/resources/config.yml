@@ -28,16 +28,14 @@ disabled_modules:
 
 modesets:
   # Modesets are lists of modules that are enabled for a player in that mode.
-  # Modules not listed in any modeset are assumed to always be available.
   # You can create, remove, and rename as many modesets as you like by modifying the list below.
   # When in PvP, the modeset of the attacker is checked first.
   # If not PvP, the modeset of the defending entity is checked.
-  # Of course, the module must also be enabled in its own config section.
-  # Sample below has modules enabled for "old" combat modeset and disabled for "new" combat modeset
   # PlaceholderAPI: %ocm_modeset%
   old:
     - "disable-attack-cooldown"
     - "attack-frequency"
+    - "attack-range"
     - "old-tool-damage"
     - "old-critical-hits"
     - "old-player-regen"
@@ -51,7 +49,6 @@ modesets:
     - "old-projectile-trajectory"
     - "old-bow-damage"
     - "fix-sounds"
-    - "fix-attack-range"
     - "fix-block-break"
     - "fix-bow-shoot"
     - "old-fall-damage"
@@ -66,10 +63,10 @@ modesets:
     - "disable-offhand"
     - "old-brewing-stand"
     - "disable-enderpearl-cooldown"
-    - "disable-projectile-randomness"
     - "chorus-fruit"
     - "old-burn-delay"
     - "disable-attack-sounds"
+    - "update-checker"
   new: []
 
 worlds:
@@ -116,6 +113,7 @@ attack-frequency:
 
 attack-range:
   # Applies 1.8-style hit detection (smaller hitbox margin, shorter creative reach).
+  enabled: true
   # Paper 1.21.11+ only; auto-disables on older/Paperless servers.
   # Note: this module re-applies reach when items are held and strips it when swapping/dropping to avoid tainting stored items.
   # Very frequent hotbar swapping may have a small performance cost.

@@ -107,7 +107,7 @@ public class OCMConfigHandler {
         ));
         final Set<String> optionalModules = new HashSet<>(Arrays.asList(
                 "disable-attack-sounds",
-                "disable-sword-sweep-particles"
+                "disable-new-attack-particles"
         ));
         final Set<String> moduleNames = ModuleLoader.getModules().stream()
                 .map(module -> module.getConfigName().toLowerCase(Locale.ROOT))
