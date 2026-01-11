@@ -25,10 +25,6 @@ import org.bukkit.util.Vector;
 import javax.annotation.Nullable;
 import java.util.*;
 
-// TODO: Einfügen: However, it includes the ability to take water from waterlogged blocks.
-// TODO: Ist Wasser nicht waterloggable?
-// TODO: Für die 1.21.11 testen?
-
 /**
  * Matches water placement behavior of version 1.8 by placing water
  * next to a waterlogged block instead of directly on it.
@@ -48,7 +44,6 @@ public class ModuleOldBucketPlacement extends OCMModule {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
         if (event.isCancelled()) return;
-        // TODO: Nur durch Via-Version aktivierbar machen?
 
         Block clicked = event.getBlockClicked();
 
@@ -149,7 +144,6 @@ public class ModuleOldBucketPlacement extends OCMModule {
         ItemStack bucket = event.getItem();
         event.setCancelled(true);
 
-        System.out.println("Fluid erreicht!");
         Material fluid = getFluidType(bucket);
         boolean animalBucket = BucketUtil.isAnimalBucket(bucket);
 
@@ -172,7 +166,6 @@ public class ModuleOldBucketPlacement extends OCMModule {
 
         Bukkit.getScheduler().runTask(OCMMain.getInstance(), () -> {
             if (filledBuckets.remove(uuid) != null) {
-                System.out.println("filledBuckets entfernt am: " + System.currentTimeMillis());
                 BucketUtil.giveEmptyBucket(player, hand, bucket, false);
             }
         });
