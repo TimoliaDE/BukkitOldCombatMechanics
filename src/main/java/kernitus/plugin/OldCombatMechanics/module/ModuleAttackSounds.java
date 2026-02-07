@@ -26,20 +26,16 @@ import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Map;
-import java.util.WeakHashMap;
-import java.util.Collections;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A module to disable the new attack sounds.
  */
 public class ModuleAttackSounds extends OCMModule {
 
-    private final SoundListener soundListener = new SoundListener();
+    private final ProtocolManager protocolManager = plugin.getProtocolManager();
+    private final SoundListener soundListener = new SoundListener(plugin);
     private final Set<String> blockedSounds = new HashSet<>();
 
     public ModuleAttackSounds(OCMMain plugin) {
@@ -53,9 +49,9 @@ public class ModuleAttackSounds extends OCMModule {
         blockedSounds.addAll(getBlockedSounds());
 
         if (isEnabled() && !blockedSounds.isEmpty())
-            PacketEvents.getAPI().getEventManager().registerListener(soundListener);
+            protocolManager.addPacketListener(soundListener);
         else
-            PacketEvents.getAPI().getEventManager().unregisterListener(soundListener);
+            protocolManager.removePacketListener(soundListener);
     }
 
     private Collection<String> getBlockedSounds() {
@@ -100,8 +96,9 @@ public class ModuleAttackSounds extends OCMModule {
         }
 
         @Override
-        public void onPacketSending(PacketEvent packetEvent) {
-            if (disabledDueToError || packetEvent.isCancelled() || !isEnabled(packetEvent.getPlayer()))
+        public void onPacketSending(PacketEvent event) {
+            Player player = event.getPlayer();
+            if (disabledDueToError || !isEnabled(player.getWorld()))
                 return;
             if (blockedSounds.isEmpty())
                 return;

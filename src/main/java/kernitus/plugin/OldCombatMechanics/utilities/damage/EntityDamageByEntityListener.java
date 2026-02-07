@@ -7,7 +7,6 @@ package kernitus.plugin.OldCombatMechanics.utilities.damage;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.module.OCMModule;
-import kernitus.plugin.OldCombatMechanics.module.ModuleSwordBlocking;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.HumanEntity;
@@ -210,18 +209,18 @@ public class EntityDamageByEntityListener extends OCMModule {
             debug("Mob " + e.getMobEnchantmentsDamage() + " Sharp: " + e.getSharpnessDamage() + " Scaled: " + enchantmentDamage, damager);
 
             // Paper sword blocking (consumable-based, no shield)
-            final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
-            double paperBlockReduction = 0;
-            if (event instanceof EntityDamageByEntityEvent && swordBlocking != null) {
-                paperBlockReduction = swordBlocking.applyPaperBlockingReduction((EntityDamageByEntityEvent) event, newDamage);
-                if (paperBlockReduction > 0) {
-                    final double preBlockDamage = newDamage;
-                    newDamage = Math.max(0, newDamage - paperBlockReduction);
-                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BLOCKING, -paperBlockReduction);
-                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, preBlockDamage);
-                    debug("Sword block (Paper): " + preBlockDamage + " - " + paperBlockReduction + " = " + newDamage, damager);
-                }
-            }
+//            final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
+//            double paperBlockReduction = 0;
+//            if (event instanceof EntityDamageByEntityEvent && swordBlocking != null) {
+//                paperBlockReduction = swordBlocking.applyPaperBlockingReduction((EntityDamageByEntityEvent) event, newDamage);
+//                if (paperBlockReduction > 0) {
+//                    final double preBlockDamage = newDamage;
+//                    newDamage = Math.max(0, newDamage - paperBlockReduction);
+//                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BLOCKING, -paperBlockReduction);
+//                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, preBlockDamage);
+//                    debug("Sword block (Paper): " + preBlockDamage + " - " + paperBlockReduction + " = " + newDamage, damager);
+//                }
+//            }
 
             if (damagee instanceof LivingEntity) {
                 // Overdamage due to immunity
@@ -236,13 +235,15 @@ public class EntityDamageByEntityListener extends OCMModule {
                 newDamage = 0;
             }
 
+            event.setDamage(newDamage);
+
             // Set damage; if we already populated modifiers for blocking, avoid overwriting BASE.
-            if (paperBlockReduction > 0 && event instanceof EntityDamageByEntityEvent) {
-                ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, newDamage + paperBlockReduction);
-                // BLOCKING was set earlier; total damage is BASE + BLOCKING (+ others)
-            } else {
-                event.setDamage(newDamage);
-            }
+//            if (paperBlockReduction > 0 && event instanceof EntityDamageByEntityEvent) {
+//                ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, newDamage + paperBlockReduction);
+//                // BLOCKING was set earlier; total damage is BASE + BLOCKING (+ others)
+//            } else {
+//                event.setDamage(newDamage);
+//            }
             debug("New Damage: " + newDamage, damager);
             debug("Attack damage (before defence): " + newDamage);
         }

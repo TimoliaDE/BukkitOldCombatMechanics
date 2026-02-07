@@ -296,7 +296,7 @@ old-player-knockback:
   # Increase to make clicking less important, decrease to make clicking more important
   knockback-extra-melee-vertical: 0.1
   # The horizontal knockback from ranged attacks is usually a bit higher than that of melee attacks.
-  knockback-extra-ranged-horizontal: 0.5 # use 0.6 for exact 1.8 PvP
+  knockback-extra-ranged-horizontal: 0.45 # use 0.6 for exact 1.8 PvP
   knockback-extra-ranged-vertical: 0.1
   # Whether to stop sprinting when dealing extra knockback
   disable-sprinting: true
