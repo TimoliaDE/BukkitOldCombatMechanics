@@ -23,6 +23,7 @@ public class ModuleFixBlockBreak extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
 
         if (event.isCancelled() && ViaVersionUtil.isLegacyClient(player)) {
             Block block = event.getBlock();

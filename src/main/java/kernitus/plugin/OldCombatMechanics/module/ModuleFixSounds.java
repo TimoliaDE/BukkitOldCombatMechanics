@@ -58,6 +58,8 @@ public class ModuleFixSounds extends OCMModule {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerPickupArrow(PlayerPickupArrowEvent event) {
         Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         Random random = new Random();
         SoundUtil.playSound(this, player.getLocation(), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS,
                 0.2F, ((random.nextFloat() - random.nextFloat()) * 0.7F + 1.0F) * 2.0F);
@@ -65,6 +67,9 @@ public class ModuleFixSounds extends OCMModule {
 
     @EventHandler(priority = EventPriority.LOW)
     public void onBlockPlace(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
         Block block = event.getBlockPlaced();
         Material item = event.getItemInHand().getType();
 
