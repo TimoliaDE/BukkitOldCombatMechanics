@@ -64,12 +64,14 @@ public class OCMMain extends JavaPlugin {
     }
 
     @Override
+    public void onLoad() {
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        PacketEvents.getAPI().load();
+    }
+
+    @Override
     public void onEnable() {
         INSTANCE = this;
-
-        // Checks if the server is using the latest NMS package
-        // (e.g., "v1_21_R6" for Minecraft versions 1.21.9 and 1.21.10)
-        isLatestNmsPackage = checkLatestNmsPackage();
 
         // Setting up config.yml
         CH.setupConfigIfNotPresent();
@@ -85,14 +87,7 @@ public class OCMMain extends JavaPlugin {
 
         // Initialise the Messenger utility
         Messenger.initialise(this);
-
-        try {
-            @Nullable Plugin plugin = getServer().getPluginManager().getPlugin("ProtocolLib");
-            if (plugin != null && plugin.isEnabled())
-                protocolManager = ProtocolLibrary.getProtocolManager();
-        } catch (Exception e) {
-            Messenger.warn("No ProtocolLib detected, some features might be disabled");
-        }
+        PacketEvents.getAPI().init();
 
         // Register all the modules
         registerModules();
@@ -222,6 +217,8 @@ public class OCMMain extends JavaPlugin {
 
         PlayerStorage.instantSave();
 
+        PacketEvents.getAPI().terminate();
+
         // Logging to console the disabling of OCM
         logger.info(pdfFile.getName() + " v" + pdfFile.getVersion() + " has been disabled");
     }
@@ -271,12 +268,6 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleGoldenApple(this));
         ModuleLoader.addModule(new ModuleFishingKnockback(this));
         ModuleLoader.addModule(new ModulePlayerKnockback(this));
-        ModuleLoader.addModule(new ModuleOldProjectileTrajectory(this));
-        ModuleLoader.addModule(new ModuleOldBowDamage(this));
-        ModuleLoader.addModule(new ModuleFixBowShoot(this));
-        ModuleLoader.addModule(new ModuleOldFallDamage(this));
-        ModuleLoader.addModule(new ModuleOldBucketPlacement(this));
-        ModuleLoader.addModule(new ModuleDamageInsideWall(this));
         ModuleLoader.addModule(new ModulePlayerRegen(this));
 
         ModuleLoader.addModule(new ModuleDisableCrafting(this));
@@ -291,13 +282,8 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleFishingRodVelocity(this));
 
         // These modules require ProtocolLib
-        if (protocolManager != null) {
-            ModuleLoader.addModule(new ModuleAttackSounds(this));
-            ModuleLoader.addModule(new ModuleNewAttackParticles(this));
-        } else {
-            Messenger.warn("No ProtocolLib detected, attack-sounds and new-attack-particles modules " +
-                    "will be disabled");
-        }
+        ModuleLoader.addModule(new ModuleAttackSounds(this));
+        ModuleLoader.addModule(new ModuleNewAttackParticles(this));
 
         // These modules require ViaVersion
         if (hasViaVersion()) {
@@ -344,6 +330,8 @@ public class OCMMain extends JavaPlugin {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        ModuleLoader.addModule(new ModuleAttackSounds(this));
+        ModuleLoader.addModule(new ModuleSwordSweepParticles(this));
     }
 
     private void registerHooks() {
@@ -396,7 +384,4 @@ public class OCMMain extends JavaPlugin {
         return INSTANCE.getDescription().getVersion();
     }
 
-    public ProtocolManager getProtocolManager() {
-        return protocolManager;
-    }
 }
