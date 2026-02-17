@@ -16,6 +16,10 @@
 # old-player-knockback: knockback-extra-ranged-horizontal = 0.6
 # old-golden-apples: duration = 30
 
+# IMPORTANT NOTE: The "attack-range" module is disabled because you cannot select
+#                 the block below when selecting a weapon again while riding a horse,
+#                 as it has the attack range component.
+
 always_enabled_modules:
 # Modules listed here are always enabled, regardless of modeset.
 # Each configurable module must appear in exactly one of: always_enabled_modules, disabled_modules, or a modeset.
@@ -113,7 +117,7 @@ attack-frequency:
 
 attack-range:
   # Applies 1.8-style hit detection (smaller hitbox margin, shorter creative reach).
-  enabled: true
+  enabled: false
   # Paper 1.21.11+ only; auto-disables on older/Paperless servers.
   # Note: this module re-applies reach when items are held and strips it when swapping/dropping to avoid tainting stored items.
   # Very frequent hotbar swapping may have a small performance cost.
