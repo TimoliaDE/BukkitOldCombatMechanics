@@ -7,6 +7,8 @@ package kernitus.plugin.OldCombatMechanics;
 
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
+import com.github.retrooper.packetevents.PacketEvents;
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import kernitus.plugin.OldCombatMechanics.commands.OCMCommandCompleter;
 import kernitus.plugin.OldCombatMechanics.commands.OCMCommandHandler;
 import kernitus.plugin.OldCombatMechanics.hooks.PlaceholderAPIHook;
@@ -64,6 +66,12 @@ public class OCMMain extends JavaPlugin {
     }
 
     @Override
+    public void onLoad() {
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        PacketEvents.getAPI().load();
+    }
+
+    @Override
     public void onEnable() {
         INSTANCE = this;
 
@@ -85,6 +93,7 @@ public class OCMMain extends JavaPlugin {
 
         // Initialise the Messenger utility
         Messenger.initialise(this);
+        PacketEvents.getAPI().init();
 
         try {
             @Nullable Plugin plugin = getServer().getPluginManager().getPlugin("ProtocolLib");
@@ -222,6 +231,8 @@ public class OCMMain extends JavaPlugin {
 
         PlayerStorage.instantSave();
 
+        PacketEvents.getAPI().terminate();
+
         // Logging to console the disabling of OCM
         logger.info(pdfFile.getName() + " v" + pdfFile.getVersion() + " has been disabled");
     }
@@ -290,22 +301,18 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleAttackFrequency(this));
         ModuleLoader.addModule(new ModuleFishingRodVelocity(this));
 
-        // These modules require ProtocolLib
-        if (protocolManager != null) {
-            ModuleLoader.addModule(new ModuleAttackSounds(this));
-            ModuleLoader.addModule(new ModuleNewAttackParticles(this));
-        } else {
-            Messenger.warn("No ProtocolLib detected, attack-sounds and new-attack-particles modules " +
-                    "will be disabled");
-        }
+        ModuleLoader.addModule(new ModuleAttackSounds(this));
+        ModuleLoader.addModule(new ModuleNewAttackParticles(this));
 
         // These modules require ViaVersion
         if (hasViaVersion()) {
             ModuleLoader.addModule(new ModuleFixSounds(this));
             ModuleLoader.addModule(new ModuleFixBlockBreak(this));
+            ModuleLoader.addModule(new ModuleFixInvisibleNametags(this));
+
         } else {
-            Messenger.warn("No ViaVersion detected, fix-sounds and fix-block-break modules " +
-                    "will be disabled");
+            Messenger.warn("No ViaVersion detected, fix-sounds and fix-block-break," +
+                    "fix-invisible-nametags modules will be disabled");
         }
     }
 

@@ -11,4 +11,15 @@ public class ViaVersionUtil {
     public static boolean isLegacyClient(Player player) {
         return Via.getAPI().getPlayerVersion(player) <= 47;
     }
+
+    /*
+     * Checks whether the server allows 1.8 clients.
+     */
+    public static boolean isLegacyClientsAllowed() {
+        int lowestSupported = Via.getAPI().getServerVersion().lowestSupportedVersion();
+
+        // Protocol 47 = 1.8.x
+        return lowestSupported <= 47;
+    }
+
 }

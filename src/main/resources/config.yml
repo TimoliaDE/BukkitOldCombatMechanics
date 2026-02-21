@@ -54,6 +54,7 @@ modesets:
     - "old-bow-damage"
     - "fix-sounds"
     - "fix-block-break"
+    - "fix-invisible-nametags"
     - "fix-bow-shoot"
     - "old-fall-damage"
     - "old-bucket-placement"
@@ -353,6 +354,14 @@ fix-block-break:
   # Prevents removed ghost blocks from appearing for
   # 1.8 clients when a block break action is cancelled.
   # Requires ViaVersion.
+  enabled: true
+
+fix-invisible-nametags:
+  # Fixes a bug for 1.8 clients where the nametags of other
+  # invisible players would still be visible above their heads.
+  # This occurs when invisible players are in a team with
+  # name tag visibility enabled.
+  # Requires ViaVersion that allows 1.8 clients.
   enabled: true
 
 fix-bow-shoot:

@@ -51,6 +51,7 @@ dependencies {
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.3")
     compileOnly("com.viaversion:viaversion-api:5.6.0")
+    implementation("com.github.retrooper:packetevents-spigot:2.11.2")
 }
 
 java {

@@ -5,75 +5,70 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.particle.Particle;
+import com.github.retrooper.packetevents.protocol.particle.type.ParticleTypes;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerParticle;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
-import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 
 /**
  * A module to disable the sword sweep and damage indicator particles.
  */
 public class ModuleNewAttackParticles extends OCMModule {
 
-    private final ProtocolManager protocolManager = plugin.getProtocolManager();
-    private final ParticleListener particleListener = new ParticleListener(plugin);
+    private final ParticleListener particleListener = new ParticleListener();
 
     public ModuleNewAttackParticles(OCMMain plugin) {
         super(plugin, "disable-new-attack-particles");
+
         reload();
     }
 
     @Override
     public void reload() {
         if (isEnabled())
-            protocolManager.addPacketListener(particleListener);
+            PacketEvents.getAPI().getEventManager().registerListener(particleListener);
         else
-            protocolManager.removePacketListener(particleListener);
+            PacketEvents.getAPI().getEventManager().unregisterListener(particleListener);
     }
 
     /**
      * Hides sweep particles.
      */
-    private class ParticleListener extends PacketAdapter {
+    private class ParticleListener extends PacketListenerAbstract {
 
         private boolean disabledDueToError;
 
-        public ParticleListener(Plugin plugin) {
-            super(plugin, PacketType.Play.Server.WORLD_PARTICLES);
-        }
-
         @Override
-        public void onPacketSending(PacketEvent event) {
-            Player player = event.getPlayer();
-            if (disabledDueToError || !isEnabled(player.getWorld()))
+        public void onPacketSend(PacketSendEvent packetEvent) {
+            if (disabledDueToError || packetEvent.isCancelled())
                 return;
 
-            PacketContainer packet = event.getPacket();
             try {
-                NamespacedKey namespacedKey;
-                if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
-                    namespacedKey = Registry.PARTICLE_TYPE.getKey(packet.getNewParticles()
-                            .read(0).getParticle());
-                } else {
-                    namespacedKey = packet.getNewParticles().read(0).getParticle().getKey();
-                }
+                if (!PacketType.Play.Server.PARTICLE.equals(packetEvent.getPacketType()))
+                    return;
 
-                if (namespacedKey == null) return;
+                final Object playerObject = packetEvent.getPlayer();
+                if (!(playerObject instanceof Player))
+                    return;
 
-                String particleName = TextUtils.getFormattedString(namespacedKey.getKey());
-                boolean isSweepParticle = particleName.contains("SWEEP");
+                final Player player = (Player) playerObject;
+                if (!isEnabled(player))
+                    return;
 
-                if (isSweepParticle || particleName.equals("DAMAGE_INDICATOR")) {
-                    event.setCancelled(true);
+                WrapperPlayServerParticle wrapper = new WrapperPlayServerParticle(packetEvent);
+                Particle<?> particle = wrapper.getParticle();
+                if (particle == null || particle.getType() == null)
+                    return;
+
+                boolean isSweepParticle = particle.getType() == ParticleTypes.SWEEP_ATTACK;
+                if (isSweepParticle || particle.getType() == ParticleTypes.DAMAGE_INDICATOR) {
+                    packetEvent.setCancelled(true);
                     debug("Cancelled " + (isSweepParticle ? "sweep" : "damage indicator") + " particles",
                             player);
                 }

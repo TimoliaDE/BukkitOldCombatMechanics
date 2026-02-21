@@ -6,6 +6,12 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType.Play;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSoundEffect;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.utilities.SoundUtil;
@@ -38,8 +44,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class ModuleFixSounds extends OCMModule {
 
-    private final ProtocolManager protocolManager = plugin.getProtocolManager();
-    private final SoundListener soundListener = new SoundListener(plugin);
+    private final SoundListener soundListener = new SoundListener();
     private static final Set<UUID> blockedSoundUUIDs = new HashSet<>();
 
     public ModuleFixSounds(OCMMain plugin) {
@@ -50,9 +55,9 @@ public class ModuleFixSounds extends OCMModule {
     @Override
     public void reload() {
         if (isEnabled())
-            protocolManager.addPacketListener(soundListener);
+            PacketEvents.getAPI().getEventManager().registerListener(soundListener);
         else
-            protocolManager.removePacketListener(soundListener);
+            PacketEvents.getAPI().getEventManager().unregisterListener(soundListener);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -90,40 +95,42 @@ public class ModuleFixSounds extends OCMModule {
     /**
      * Replaces the sound if needed.
      */
-    private class SoundListener extends PacketAdapter {
+    private class SoundListener extends PacketListenerAbstract {
 
         private static final Set<String> fireSoundNames = Set.of("ITEM_FIRECHARGE_USE", "ITEM_FLINTANDSTEEL_USE");
         private boolean disabledDueToError;
 
-        public SoundListener(Plugin plugin) {
-            super(plugin, ListenerPriority.LOWEST, PacketType.Play.Server.NAMED_SOUND_EFFECT);
-        }
-
         @Override
-        public void onPacketSending(PacketEvent event) {
-            Player player = event.getPlayer();
-            if (disabledDueToError || event.isCancelled() || !ViaVersionUtil.isLegacyClient(player) ||
-                    !isEnabled(player.getWorld())) {
+        public void onPacketSend(PacketSendEvent packetEvent) {
+            if (disabledDueToError || packetEvent.isCancelled())
+                return;
+
+            final Object playerObject = packetEvent.getPlayer();
+            if (!(playerObject instanceof Player))
+                return;
+
+            final Player player = (Player) playerObject;
+            if (!isEnabled(player))
+                return;
+
+            final Object packetType = packetEvent.getPacketType();
+            if (!Play.Server.NAMED_SOUND_EFFECT.equals(packetType)
+                    && !Play.Server.ENTITY_SOUND_EFFECT.equals(packetType)) {
                 return;
             }
 
-            PacketContainer packet = event.getPacket();
             try {
-                NamespacedKey namespacedKey;
-                if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
-                    namespacedKey = Registry.SOUND_EVENT.getKey(packet.getSoundEffects().read(0));
-                } else {
-                    namespacedKey = packet.getSoundEffects().read(0).getKey();
-                }
+                WrapperPlayServerSoundEffect wrapper = new WrapperPlayServerSoundEffect(packetEvent);
+                com.github.retrooper.packetevents.protocol.sound.Sound sound = wrapper.getSound();
+                if (sound == null || sound.getSoundId() == null)
+                    return;
 
-                if (namespacedKey == null) return;
-
-                String soundName = TextUtils.getFormattedString(namespacedKey.getKey());
+                String soundName = TextUtils.getFormattedString(sound.getSoundId().toString());
                 UUID uuid = player.getUniqueId();
 
                 if (!fireSoundNames.contains(soundName) && blockedSoundUUIDs.remove(uuid)) {
                     debug("Replaced wool sound with fire sound", player);
-                    event.setCancelled(true);
+                    packetEvent.setCancelled(true);
                     return;
                 }
 
@@ -131,16 +138,17 @@ public class ModuleFixSounds extends OCMModule {
                 boolean uiButtonClick = soundName.equals("UI_BUTTON_CLICK");
                 if (!cobwebPlaceSound && !uiButtonClick) return;
 
-                int x = packet.getIntegers().read(0);
-                int y = packet.getIntegers().read(1);
-                int z = packet.getIntegers().read(2);
+                Vector3i effectPos = wrapper.getEffectPosition();
+                int x = effectPos.getX();
+                int y = effectPos.getY();
+                int z = effectPos.getZ();
 
                 Location loc = new Location(player.getWorld(), x / 8.0, y / 8.0, z / 8.0);
 
-                float volume = packet.getFloat().read(0);
-                float pitch = packet.getFloat().read(1);
+                float volume = wrapper.getVolume();
+                float pitch = wrapper.getPitch();
 
-                event.setCancelled(true);
+                packetEvent.setCancelled(true);
 
                 if (cobwebPlaceSound) {
                     player.playSound(loc, Sound.BLOCK_STONE_PLACE, volume, pitch);

@@ -5,41 +5,36 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSoundEffect;
 import com.cryptomorin.xseries.XSound;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 
-import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.lang.reflect.Method;
 
 /**
  * A module to disable the new attack sounds.
  */
 public class ModuleAttackSounds extends OCMModule {
 
-    private final ProtocolManager protocolManager = plugin.getProtocolManager();
-    private final SoundListener soundListener = new SoundListener(plugin);
+    private final SoundListener soundListener = new SoundListener();
     private final Set<String> blockedSounds = new HashSet<>();
 
     public ModuleAttackSounds(OCMMain plugin) {
         super(plugin, "disable-attack-sounds");
+
         reload();
     }
 
@@ -49,9 +44,9 @@ public class ModuleAttackSounds extends OCMModule {
         blockedSounds.addAll(getBlockedSounds());
 
         if (isEnabled() && !blockedSounds.isEmpty())
-            protocolManager.addPacketListener(soundListener);
+            PacketEvents.getAPI().getEventManager().registerListener(soundListener);
         else
-            protocolManager.removePacketListener(soundListener);
+            PacketEvents.getAPI().getEventManager().unregisterListener(soundListener);
     }
 
     private Collection<String> getBlockedSounds() {
@@ -87,39 +82,42 @@ public class ModuleAttackSounds extends OCMModule {
     /**
      * Disables attack sounds.
      */
-    private class SoundListener extends PacketAdapter {
+    private class SoundListener extends PacketListenerAbstract {
 
         private boolean disabledDueToError;
 
-        public SoundListener(Plugin plugin) {
-            super(plugin, ListenerPriority.HIGH, PacketType.Play.Server.NAMED_SOUND_EFFECT);
-        }
-
         @Override
-        public void onPacketSending(PacketEvent event) {
-            Player player = event.getPlayer();
-            if (disabledDueToError || !isEnabled(player.getWorld()))
+        public void onPacketSend(PacketSendEvent packetEvent) {
+            if (disabledDueToError || packetEvent.isCancelled())
                 return;
             if (blockedSounds.isEmpty())
                 return;
 
-            PacketContainer packet = event.getPacket();
+            final Object playerObject = packetEvent.getPlayer();
+            if (!(playerObject instanceof Player))
+                return;
+
+            final Player player = (Player) playerObject;
+            if (!isEnabled(player))
+                return;
+
+            final Object packetType = packetEvent.getPacketType();
+            if (!PacketType.Play.Server.NAMED_SOUND_EFFECT.equals(packetType)
+                    && !PacketType.Play.Server.ENTITY_SOUND_EFFECT.equals(packetType)) {
+                return;
+            }
+
             try {
-                NamespacedKey namespacedKey;
-                if (Reflector.versionIsNewerOrEqualTo(1, 20, 5)) {
-                    namespacedKey = Registry.SOUND_EVENT.getKey(packet.getSoundEffects().read(0));
-                } else {
-                    namespacedKey = packet.getSoundEffects().read(0).getKey();
-                }
+                WrapperPlayServerSoundEffect wrapper = new WrapperPlayServerSoundEffect(packetEvent);
+                com.github.retrooper.packetevents.protocol.sound.Sound sound = wrapper.getSound();
+                if (sound == null || sound.getSoundId() == null)
+                    return;
 
-                if (namespacedKey == null) return;
-
-                String soundName = TextUtils.getFormattedString(namespacedKey.getKey());
+                String soundName = TextUtils.getFormattedString(sound.getSoundId().toString());
                 if (blockedSounds.contains(soundName)) {
-                    event.setCancelled(true);
+                    packetEvent.setCancelled(true);
                     debug("Blocked sound " + soundName, player);
                 }
-
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;
                 Messenger.warn(e, "Error detecting sound packets.");
