@@ -300,20 +300,6 @@ public class ModuleSwordBlocking extends OCMModule {
 
         if (action != Action.RIGHT_CLICK_BLOCK && action != Action.RIGHT_CLICK_AIR) return;
 
-        boolean usingHand = e.getHand() == EquipmentSlot.HAND;
-        PlayerInventory inv = player.getInventory();
-        final ItemStack main = inv.getItemInMainHand();
-
-        // Ensures that the offhand shield is prioritized when using a sword
-        // in the main hand for blocking
-        if (usingHand && hasShieldNoCooldown(player) && isHoldingSword(main.getType())) {
-            if (stripConsumable(main)) {
-                e.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> player.startUsingItem(EquipmentSlot.OFF_HAND));
-                return;
-            }
-        }
-
         // If they clicked on an interactive block, the 2nd event with the offhand won't fire
         // This is also the case if the main hand item was used, e.g. a bow
         // TODO right-clicking on a mob also only fires one hand
@@ -330,17 +316,15 @@ public class ModuleSwordBlocking extends OCMModule {
         doShieldBlock(player);
     }
 
-    private boolean hasShieldNoCooldown(Player player) {
-        PlayerInventory inv = player.getInventory();
-        return hasShield(inv) && !player.hasCooldown(inv.getItemInOffHand());
-    }
-
     private void doShieldBlock(Player player) {
         final PlayerInventory inventory = player.getInventory();
 
         final ItemStack mainHandItem = inventory.getItemInMainHand();
         final ItemStack offHandItem = inventory.getItemInOffHand();
 
+        // Ensures that the offhand shield is prioritized when using a sword
+        // in the main hand for blocking
+        if (hasShield(inventory)) return;
         if (!isHoldingSword(mainHandItem.getType())) return;
 
         if (module().getBoolean("use-permission") &&
@@ -566,6 +550,10 @@ public class ModuleSwordBlocking extends OCMModule {
     /* ---------- Paper consumable component (animation-only) ---------- */
 
     private boolean applyConsumableComponent(Player player, ItemStack item) {
+        // Ensures that the offhand shield is prioritized when using a sword
+        // in the main hand for blocking
+        if (hasShield(player.getInventory())) return false;
+
         if (!supportsPaperAnimation(player) || paperApply == null) return false;
         if (item == null || item.getType() == Material.AIR || !isHoldingSword(item.getType())) return false;
         if (!isEnabled(player)) return false;

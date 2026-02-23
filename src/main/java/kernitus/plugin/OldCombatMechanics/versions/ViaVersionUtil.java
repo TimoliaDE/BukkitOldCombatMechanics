@@ -1,6 +1,7 @@
 package kernitus.plugin.OldCombatMechanics.versions;
 
 import com.viaversion.viaversion.api.Via;
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
 import org.bukkit.entity.Player;
 
 public class ViaVersionUtil {
@@ -16,10 +17,7 @@ public class ViaVersionUtil {
      * Checks whether the server allows 1.8 clients.
      */
     public static boolean isLegacyClientsAllowed() {
-        int lowestSupported = Via.getAPI().getServerVersion().lowestSupportedVersion();
-
         // Protocol 47 = 1.8.x
-        return lowestSupported <= 47;
+        return Via.getAPI().getSupportedVersions().contains(ProtocolVersion.v1_8.getVersion());
     }
-
 }

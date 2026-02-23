@@ -1,11 +1,5 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
@@ -16,8 +10,6 @@ import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.utilities.SoundUtil;
 import kernitus.plugin.OldCombatMechanics.utilities.TextUtils;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
-import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -25,7 +17,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerPickupArrowEvent;
-import org.bukkit.plugin.Plugin;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -115,7 +106,7 @@ public class ModuleFixSounds extends OCMModule {
 
             final Object packetType = packetEvent.getPacketType();
             if (!Play.Server.NAMED_SOUND_EFFECT.equals(packetType)
-                    && !Play.Server.ENTITY_SOUND_EFFECT.equals(packetType)) {
+                    && !Play.Server.SOUND_EFFECT.equals(packetType)) {
                 return;
             }
 

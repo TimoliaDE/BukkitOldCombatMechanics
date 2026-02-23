@@ -22,6 +22,7 @@ import kernitus.plugin.OldCombatMechanics.utilities.damage.EntityDamageByEntityL
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.ModesetListener;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage;
+import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimpleBarChart;
 import org.bstats.charts.SimplePie;
@@ -308,7 +309,13 @@ public class OCMMain extends JavaPlugin {
         if (hasViaVersion()) {
             ModuleLoader.addModule(new ModuleFixSounds(this));
             ModuleLoader.addModule(new ModuleFixBlockBreak(this));
-            ModuleLoader.addModule(new ModuleFixInvisibleNametags(this));
+
+            if (ViaVersionUtil.isLegacyClientsAllowed()) {
+                ModuleLoader.addModule(new ModuleFixInvisibleNametags(this));
+            } else {
+                Messenger.warn("ViaVersion does not allow 1.8 clients. " +
+                        "Disabling fix-invisible-nametags module.");
+            }
 
         } else {
             Messenger.warn("No ViaVersion detected, fix-sounds and fix-block-break," +

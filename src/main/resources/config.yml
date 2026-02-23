@@ -233,11 +233,11 @@ shield-damage-reduction:
   # Set amount to 0 and percentage to 100 for 1.8 behaviour, i.e. arrows go through shields
   projectileDamageReductionAmount: 1
   projectileDamageReductionPercentage: 50
-  # If enabled, the damage reduction will not be applied to vanilla shields
+  # If enabled, damage reduction will not apply to vanilla shields.
+  # Vanilla shield behavior will be used instead.
   noShields: true
-  # If enabled, the knockback and/or damage will not apply when
-  # blocked by a vanilla shield
-  noDamageWhenBlocking: true
+  # If enabled, snowballs can be completely blocked by a vanilla shield
+  noSnowballs: true
 
 sword-blocking:
   # How often, in ticks, OCM should check if the player is still blocking with a shield, and remove it if not
@@ -254,7 +254,7 @@ disable-sword-sweep:
 
 disable-new-attack-particles:
   # This is to disable the sword sweep attack particles
-  # Requires ProtocolLib
+  # Requires PacketEvents
 
 # ########################
 # KNOCKBACK
@@ -310,7 +310,7 @@ old-player-knockback:
   old-knockback-resistance-players: false
   # When enabled, the arrow hit sound will be played if an arrow hits
   # another player blocking with a sword.
-  # This option requires ProtocolLib
+  # This option Requires PacketEvents
   # Only supported up to version 1.21.2 and when the module
   # sword-blocking is enabled.
   arrow-hit-sound: true
@@ -642,7 +642,7 @@ old-burn-delay:
 
 disable-attack-sounds:
   # Disables attack sounds that were added with 1.9+
-  # Requires ProtocolLib
+  # Requires PacketEvents
   # The sounds that will be blocked by this module
   blocked-sound-names:
     - "ENTITY_PLAYER_ATTACK_STRONG"

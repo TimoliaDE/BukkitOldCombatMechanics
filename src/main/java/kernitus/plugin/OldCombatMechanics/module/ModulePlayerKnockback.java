@@ -395,14 +395,19 @@ public class ModulePlayerKnockback extends OCMModule {
     }
 
     private boolean hasBlocked(EntityDamageByEntityEvent event) {
-        return event.getDamage(EntityDamageEvent.DamageModifier.BLOCKING) < 0 ||
-                hasBlockedModule(event.getEntity());
+        if (!(event.getEntity() instanceof Player player)) return false;
+
+        // Paper sword blocking sets the BLOCKING modifier to emulate 1.8 sword blocking. This module is for
+        // shield blocking only; do not double-apply a second reduction when the player is blocking with a sword.
+        final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
+        return swordBlocking != null && swordBlocking.isPaperSwordBlocking(player) ||
+                event.getDamage(EntityDamageEvent.DamageModifier.BLOCKING) < 0;
     }
 
     private boolean hasFullBlockedModule(Entity damagee) {
         final UUID victimId = damagee.getUniqueId();
-        Map<UUID, List<ItemStack>> fullyBlocked = ModuleShieldDamageReduction.getFullyBlocked();
-        return fullyBlocked.containsKey(victimId);
+        Set<UUID> fullyBlocked = ModuleShieldDamageReduction.getFullyBlocked();
+        return fullyBlocked.contains(victimId);
     }
 
     private boolean hasFullBlockedVanilla(EntityDamageByEntityEvent event) {

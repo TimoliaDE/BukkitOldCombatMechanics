@@ -6,12 +6,8 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import kernitus.plugin.OldCombatMechanics.utilities.ItemUtil;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.damage.DamageSource;
-import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -25,7 +21,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.util.Vector;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -35,19 +31,25 @@ import java.util.stream.Collectors;
  */
 public class ModuleShieldDamageReduction extends OCMModule {
 
-    private int genericDamageReductionAmount, genericDamageReductionPercentage,
-            projectileDamageReductionAmount, projectileDamageReductionPercentage;
-    private boolean noShields;
-    private boolean noDamageSnowballs;
+    private int genericDamageReductionAmount, genericDamageReductionPercentage, projectileDamageReductionAmount, projectileDamageReductionPercentage;
 
-    private final static Map<UUID, List<ItemStack>> fullyBlocked = new WeakHashMap<>();
+    // When a hit is fully blocked (0 final damage), vanilla can still damage armour durability.
+    // We cancel that armour durability for one tick only (just long enough for PlayerItemDamageEvent to fire).
+    //
+    // Performance/correctness:
+    // - Use a normal HashMap (WeakHashMap<UUID, ...> can drop entries unpredictably).
+    // - Avoid scheduling one task per fully-blocked hit: keep a shared cleanup task that runs only while entries exist.
+    private final static Map<UUID, FullyBlockedArmour> fullyBlocked = new HashMap<>();
     private final static Set<UUID> blockedPlayers = new HashSet<>();
+    private BukkitTask fullyBlockedCleanupTask;
+    private long fullyBlockedTickCounter;
+    private boolean noShields;
+    private boolean noSnowballs;
 
     public ModuleShieldDamageReduction(OCMMain plugin) {
         super(plugin, "shield-damage-reduction");
         reload();
     }
-
 
     @Override
     public void reload() {
@@ -56,7 +58,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         projectileDamageReductionAmount = module().getInt("projectileDamageReductionAmount", 1);
         projectileDamageReductionPercentage = module().getInt("projectileDamageReductionPercentage", 50);
         noShields = module().getBoolean("noShields", true);
-        noDamageSnowballs = module().getBoolean("noSnowballs", true);
+        noSnowballs = module().getBoolean("noSnowballs", true);
     }
 
     @EventHandler
@@ -75,7 +77,9 @@ public class ModuleShieldDamageReduction extends OCMModule {
         final ItemStack item = e.getItem();
 
         if (fullyBlocked.containsKey(uuid)) {
-            final List<ItemStack> armour = fullyBlocked.get(uuid);
+            final FullyBlockedArmour data = fullyBlocked.get(uuid);
+            if (data == null) return;
+            final List<ItemStack> armour = data.armour;
             // ItemStack.equals() checks material, durability and quantity to make sure nothing changed in the meantime
             // We're checking all the pieces this way just in case they're wearing two helmets or something strange
             final List<ItemStack> matchedPieces = armour.stream().filter(piece -> piece.equals(item)).collect(Collectors.toList());
@@ -88,37 +92,38 @@ public class ModuleShieldDamageReduction extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onHit(EntityDamageByEntityEvent event) {
-        final Entity damager = event.getDamager();
-        final Entity entity = event.getEntity();
-        if (!(entity instanceof Player player) || !isEnabled(damager, player)) return;
+    public void onHit(EntityDamageByEntityEvent e) {
+        final Entity entity = e.getEntity();
+
+        if (!(entity instanceof Player)) return;
+
+        final Player player = (Player) entity;
+
+        if (!isEnabled(e.getDamager(), player)) return;
+
+        // Paper sword blocking sets the BLOCKING modifier to emulate 1.8 sword blocking. This module is for
+        // shield blocking only; do not double-apply a second reduction when the player is blocking with a sword.
+        final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
+        if (swordBlocking != null && swordBlocking.isPaperSwordBlocking(player)) return;
 
         // Blocking is calculated after base and hard hat, and before armour etc.
-        final double baseDamage = event.getDamage(DamageModifier.BASE) + event.getDamage(DamageModifier.HARD_HAT);
+        final double baseDamage = e.getDamage(DamageModifier.BASE) + e.getDamage(DamageModifier.HARD_HAT);
+        if (!shieldBlockedDamage(baseDamage, e.getDamage(DamageModifier.BLOCKING))) return;
 
-        // Ensures that damage can be reduced when players block with swords on
-        // 1.21.3/1.21.4 servers, especially for 1.8 clients
-        if (ItemUtil.isUsingConsumableSword(player) && isDamageSourceBlocked(player, event))
-            event.setDamage(DamageModifier.BLOCKING, -0.00001);
-
-        if (!shieldBlockedDamage(baseDamage, event.getDamage(DamageModifier.BLOCKING))) return;
-
-        final EntityType type = damager.getType();
+        final EntityType type = e.getDamager().getType();
         boolean usingVanillaShield = isUsingVanillaShield(player);
-        boolean hasBlockedSnowballs = noDamageSnowballs && usingVanillaShield && event.getDamage() > 0 &&
+        boolean hasBlockedSnowballs = noSnowballs && usingVanillaShield && e.getDamage() > 0 &&
                 (type == EntityType.SNOWBALL || type == EntityType.EGG || type == EntityType.ENDER_PEARL);
 
         if (hasBlockedSnowballs) {
-            event.setDamage(0);
+            e.setDamage(0);
             return;
         }
 
         if (noShields && usingVanillaShield) return;
 
-        final double damageReduction = hasBlockedSnowballs ? 1_000_000 :
-                getDamageReduction(baseDamage, event.getCause());
-
-        event.setDamage(DamageModifier.BLOCKING, -damageReduction);
+        final double damageReduction = getDamageReduction(baseDamage, e.getCause());
+        e.setDamage(DamageModifier.BLOCKING, -damageReduction);
         final double currentDamage = baseDamage - damageReduction;
 
         debug("Blocking: " + baseDamage + " - " + damageReduction + " = " + currentDamage, player);
@@ -130,12 +135,8 @@ public class ModuleShieldDamageReduction extends OCMModule {
 
         if (currentDamage <= 0) { // Make sure armour is not damaged if fully blocked
             final List<ItemStack> armour = Arrays.stream(player.getInventory().getArmorContents()).filter(Objects::nonNull).collect(Collectors.toList());
-            fullyBlocked.put(uuid, armour);
-
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                fullyBlocked.remove(uuid);
-                debug("Removed from fully blocked set!", player);
-            }, 1L);
+            fullyBlocked.put(uuid, new FullyBlockedArmour(armour, fullyBlockedTickCounter + 1L));
+            ensureFullyBlockedCleanupTaskRunning();
         }
     }
 
@@ -149,6 +150,46 @@ public class ModuleShieldDamageReduction extends OCMModule {
 
     private static boolean isUsingVanillaShield(Player player) {
         return player.isBlocking() && isHoldingVanillaShield(player);
+    }
+
+    private void ensureFullyBlockedCleanupTaskRunning() {
+        if (fullyBlockedCleanupTask != null) return;
+        fullyBlockedTickCounter = 0;
+
+        fullyBlockedCleanupTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            fullyBlockedTickCounter++;
+            if (fullyBlocked.isEmpty()) {
+                stopFullyBlockedCleanupTaskIfIdle();
+                return;
+            }
+
+            final Iterator<Map.Entry<UUID, FullyBlockedArmour>> it = fullyBlocked.entrySet().iterator();
+            while (it.hasNext()) {
+                final FullyBlockedArmour data = it.next().getValue();
+                if (data == null || data.expiresAtTick <= fullyBlockedTickCounter) {
+                    it.remove();
+                }
+            }
+
+            stopFullyBlockedCleanupTaskIfIdle();
+        }, 1L, 1L);
+    }
+
+    private void stopFullyBlockedCleanupTaskIfIdle() {
+        if (fullyBlockedCleanupTask == null) return;
+        if (!fullyBlocked.isEmpty()) return;
+        fullyBlockedCleanupTask.cancel();
+        fullyBlockedCleanupTask = null;
+    }
+
+    private static final class FullyBlockedArmour {
+        private final List<ItemStack> armour;
+        private final long expiresAtTick;
+
+        private FullyBlockedArmour(List<ItemStack> armour, long expiresAtTick) {
+            this.armour = armour;
+            this.expiresAtTick = expiresAtTick;
+        }
     }
 
     private double getDamageReduction(double damage, DamageCause damageCause) {
@@ -175,50 +216,8 @@ public class ModuleShieldDamageReduction extends OCMModule {
         return attackDamage > 0 && blockingReduction < 0;
     }
 
-    private boolean isBypassingShield(EntityDamageByEntityEvent event) {
-        org.bukkit.damage.DamageType damageType = event.getDamageSource().getDamageType();
-        return org.bukkit.tag.DamageTypeTags.BYPASSES_SHIELD.isTagged(damageType);
-    }
-
-    private boolean isDamageSourceBlocked(Player player, EntityDamageByEntityEvent event) {
-        Entity damager = event.getDamager();
-        boolean flag = damager instanceof AbstractArrow entityarrow && entityarrow.getPierceLevel() > 0;
-
-        // The player.isBlocking() has been removed in the if-condition,
-        // so the damage reduction can also apply for the versions 1.21.5 and above
-        if (!isBypassingShield(event) && !flag) {
-            DamageSource damageSource = event.getDamageSource();
-            Location srcLoc = damageSource.getSourceLocation();
-
-            if (srcLoc != null) {
-                Vector sourcePosition = new Vector(srcLoc.getX(), srcLoc.getY(), srcLoc.getZ());
-                Location playerLoc = player.getLocation();
-
-                Vector vec3 = this.calculateViewVector(playerLoc.getYaw());
-                Vector playerVec = new Vector(playerLoc.getX(), playerLoc.getY(), playerLoc.getZ());
-                Vector vec31 = playerVec.subtract(sourcePosition);
-                vec31 = new Vector(vec31.getX(), 0.0, vec31.getZ()).normalize();
-
-                // Checks if the damage comes from in front of a player blocking with a shield
-                return vec31.dot(vec3) < 0.0;
-            }
-        }
-
-        return false;
-    }
-
-    private Vector calculateViewVector(float yaw) {
-        float f2 = (float) 0.0 * ((float) Math.PI / 180F);
-        float f3 = -yaw * ((float) Math.PI / 180F);
-        float f4 = (float) Math.cos(f3);
-        float f5 = (float) Math.sin(f3);
-        float f6 = (float) Math.cos(f2);
-        float f7 = (float) Math.sin(f2);
-        return new Vector(f5 * f6, -f7, f4 * f6);
-    }
-
-    public static Map<UUID, List<ItemStack>> getFullyBlocked() {
-        return fullyBlocked;
+    public static Set<UUID> getFullyBlocked() {
+        return fullyBlocked.keySet();
     }
 
     public static Set<UUID> getBlockedPlayers() {

@@ -51,8 +51,6 @@ public class ModuleFixInvisibleNametags extends OCMModule {
 
     @EventHandler
     public void onEntityPotionEffect(EntityPotionEffectEvent event) {
-        if (!ViaVersionUtil.isLegacyClientsAllowed()) return;
-
         Entity entity = event.getEntity();
         if (!(entity instanceof Player player)) return;
 
@@ -60,20 +58,18 @@ public class ModuleFixInvisibleNametags extends OCMModule {
         @Nullable PotionEffect newEffect = event.getNewEffect();
 
         if (newEffect != null && newEffect.getType() == PotionEffectType.INVISIBILITY) {
-            hideNameTag(player);
             invisiblePlayers.add(player);
+            hideNameTag(player);
 
         } else if (oldEffect != null && oldEffect.getType() == PotionEffectType.INVISIBILITY &&
                 newEffect == null) {
-            showNameTag(player);
             invisiblePlayers.remove(player);
+            showNameTag(player);
         }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        if (!ViaVersionUtil.isLegacyClientsAllowed()) return;
-
         Player viewer = event.getPlayer();
         if (!isEnabled(viewer)) return;
 
@@ -82,8 +78,6 @@ public class ModuleFixInvisibleNametags extends OCMModule {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        if (!ViaVersionUtil.isLegacyClientsAllowed()) return;
-
         Player viewer = event.getPlayer();
         if (!isEnabled(viewer)) return;
 
@@ -150,9 +144,11 @@ public class ModuleFixInvisibleNametags extends OCMModule {
                 if (teamInfo == null) return;
                 if (teamInfo.getTagVisibility() == WrapperPlayServerTeams.NameTagVisibility.NEVER) return;
 
-                teamInfo.setTagVisibility(WrapperPlayServerTeams.NameTagVisibility.NEVER);
-                packetEvent.markForReEncode(true);
-                debug("Changed nametag when updating teams", player);
+                if (invisiblePlayers.contains(player)) {
+                    teamInfo.setTagVisibility(WrapperPlayServerTeams.NameTagVisibility.NEVER);
+                    packetEvent.markForReEncode(true);
+                    debug("Changed nametag when updating teams", player);
+                }
 
             } catch (Exception | ExceptionInInitializerError e) {
                 disabledDueToError = true;

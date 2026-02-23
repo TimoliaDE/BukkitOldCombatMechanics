@@ -31,7 +31,8 @@ public class VersionChecker {
     private static int[] getVersionNumbers(String ver) {
         // Support both -beta and -SNAPSHOT
         Matcher m = Pattern
-                .compile("(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-(beta|SNAPSHOT)(\\d*))?", Pattern.CASE_INSENSITIVE)
+                .compile("(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-(beta|adapted|SNAPSHOT)(\\d*))?",
+                        Pattern.CASE_INSENSITIVE)
                 .matcher(ver);
         if (!m.matches())
             throw new IllegalArgumentException("Plugin version formatted wrong!");
@@ -40,7 +41,8 @@ public class VersionChecker {
                 Integer.parseInt(m.group(1)), // MAJOR
                 Integer.parseInt(m.group(2)), // MINOR
                 m.group(3) == null ? 0 : Integer.parseInt(m.group(3)), // PATCH (default 0)
-                m.group(4) == null ? Integer.MAX_VALUE : // Release version
+                m.group(4) == null || m.group(4).equalsIgnoreCase("adapted") ?
+                        Integer.MAX_VALUE : // Release version
                         (m.group(5).isEmpty() ? 0 : Integer.parseInt(m.group(5))) // Pre-release number
         };
     }

@@ -103,7 +103,7 @@ public class ModuleAttackSounds extends OCMModule {
 
             final Object packetType = packetEvent.getPacketType();
             if (!PacketType.Play.Server.NAMED_SOUND_EFFECT.equals(packetType)
-                    && !PacketType.Play.Server.ENTITY_SOUND_EFFECT.equals(packetType)) {
+                    && !PacketType.Play.Server.SOUND_EFFECT.equals(packetType)) {
                 return;
             }
 
