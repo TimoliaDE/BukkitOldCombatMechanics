@@ -12,17 +12,16 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.EntityPotionEffectEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scoreboard.Team;
 
-import javax.annotation.Nullable;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.stream.Stream;
+
+import static org.bukkit.potion.PotionEffectType.*;
 
 /**
  * Fixes a bug for 1.8 clients where the nametags of other
@@ -34,7 +33,6 @@ import java.util.Set;
 public class ModuleFixInvisibleNametags extends OCMModule {
 
     private final TeamPacketListener teamPacketListener = new TeamPacketListener();
-    private static final Set<Player> invisiblePlayers = new HashSet<>();
 
     public ModuleFixInvisibleNametags(OCMMain plugin) {
         super(plugin, "fix-invisible-nametags");
@@ -49,68 +47,65 @@ public class ModuleFixInvisibleNametags extends OCMModule {
             PacketEvents.getAPI().getEventManager().unregisterListener(teamPacketListener);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onEntityPotionEffect(EntityPotionEffectEvent event) {
         Entity entity = event.getEntity();
         if (!(entity instanceof Player player)) return;
 
-        @Nullable PotionEffect oldEffect = event.getOldEffect();
-        @Nullable PotionEffect newEffect = event.getNewEffect();
+        PotionEffect oldEffect = event.getOldEffect();
+        PotionEffect newEffect = event.getNewEffect();
+        boolean hasNewEffect = newEffect != null;
 
-        if (newEffect != null && newEffect.getType() == PotionEffectType.INVISIBILITY) {
-            invisiblePlayers.add(player);
+        if (hasNewEffect && newEffect.getType() == INVISIBILITY) {
             hideNameTag(player);
 
-        } else if (oldEffect != null && oldEffect.getType() == PotionEffectType.INVISIBILITY &&
-                newEffect == null) {
-            invisiblePlayers.remove(player);
+        } else if (oldEffect != null && oldEffect.getType() == INVISIBILITY && !hasNewEffect) {
             showNameTag(player);
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Player viewer = event.getPlayer();
-        if (!isEnabled(viewer)) return;
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
 
-        invisiblePlayers.forEach(invis -> hideNameTag(invis, viewer));
+        if (player.hasPotionEffect(INVISIBILITY)) {
+            hideNameTag(player);
+        }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player viewer = event.getPlayer();
-        if (!isEnabled(viewer)) return;
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
 
-        invisiblePlayers.forEach(invis -> showNameTag(invis, viewer));
+        if (player.hasPotionEffect(INVISIBILITY)) {
+            showNameTag(player);
+        }
     }
 
     private void hideNameTag(Player target) {
-        changeNameTag(target, Bukkit.getOnlinePlayers(), true);
-    }
-
-    private void hideNameTag(Player target, Player viewer) {
-        changeNameTag(target, Set.of(viewer), true);
+        changeNameTag(target, true);
     }
 
     private void showNameTag(Player target) {
-        changeNameTag(target, Bukkit.getOnlinePlayers(), false);
+        changeNameTag(target, false);
     }
 
-    private void showNameTag(Player target, Player viewer) {
-        changeNameTag(target, Set.of(viewer), false);
-    }
+    private void changeNameTag(Player target, boolean invisible) {
+        final Team.OptionStatus status = invisible ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS;
+        final String name = target.getName();
 
-    private void changeNameTag(Player player, Collection<? extends Player> viewers, boolean invisibility) {
-        final Team.OptionStatus status = invisibility ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS;
-        final String name = player.getName();
+        // When invisible, exclude target from the viewers so they can see name tags of visible players
+        Stream<? extends Player> otherPlayers = Bukkit.getOnlinePlayers().stream()
+                .filter(other -> !other.equals(target));
 
-        for (final Player other : viewers) {
+        otherPlayers.forEach(other -> {
             Team otherTeam = other.getScoreboard().getEntryTeam(name);
+            if (otherTeam == null) return;
 
-            if (otherTeam != null) {
-                otherTeam.setOption(Team.Option.NAME_TAG_VISIBILITY, status);
-            }
-        }
+            otherTeam.setOption(Team.Option.NAME_TAG_VISIBILITY, status);
+        });
     }
 
     private class TeamPacketListener extends PacketListenerAbstract {
@@ -129,25 +124,30 @@ public class ModuleFixInvisibleNametags extends OCMModule {
                     return;
 
                 final Object playerObject = packetEvent.getPlayer();
-                if (!(playerObject instanceof Player player))
+                if (!(playerObject instanceof Player viewer))
                     return;
 
-                if (!isEnabled(player))
+                if (!isEnabled(viewer))
                     return;
 
                 WrapperPlayServerTeams wrapper = new WrapperPlayServerTeams(packetEvent);
                 WrapperPlayServerTeams.TeamMode mode = wrapper.getTeamMode();
 
-                if (mode == WrapperPlayServerTeams.TeamMode.REMOVE) return;
+                if (mode != WrapperPlayServerTeams.TeamMode.ADD_ENTITIES &&
+                        mode != WrapperPlayServerTeams.TeamMode.CREATE) return;
 
                 WrapperPlayServerTeams.ScoreBoardTeamInfo teamInfo = wrapper.getTeamInfo().orElse(null);
                 if (teamInfo == null) return;
-                if (teamInfo.getTagVisibility() == WrapperPlayServerTeams.NameTagVisibility.NEVER) return;
 
-                if (invisiblePlayers.contains(player)) {
+                String targetName = wrapper.getTeamName();
+                Player target = Bukkit.getPlayer(targetName);
+                boolean isInvisible = target != null && target.hasPotionEffect(INVISIBILITY);
+
+                if (isInvisible && !viewer.getName().equals(targetName) &&
+                        teamInfo.getTagVisibility() != WrapperPlayServerTeams.NameTagVisibility.NEVER) {
                     teamInfo.setTagVisibility(WrapperPlayServerTeams.NameTagVisibility.NEVER);
                     packetEvent.markForReEncode(true);
-                    debug("Changed nametag when updating teams", player);
+                    debug("Set nametag visibility to never when changing teams", viewer);
                 }
 
             } catch (Exception | ExceptionInInitializerError e) {

@@ -139,13 +139,14 @@ public class ModuleFixSounds extends OCMModule {
                 float volume = wrapper.getVolume();
                 float pitch = wrapper.getPitch();
 
-                packetEvent.setCancelled(true);
-
                 if (cobwebPlaceSound) {
+                    packetEvent.setCancelled(true);
                     player.playSound(loc, Sound.BLOCK_STONE_PLACE, volume, pitch);
                     debug("Replaced cobweb place sound with stone place sound", player);
 
-                } else {
+                    // The condition is necessary to avoid an infinite recursion
+                } else if (sound.isRegistered()) {
+                    packetEvent.setCancelled(true);
                     player.playSound(loc, "minecraft:ui.button.click", volume, pitch);
                     debug("Replaced music disc ward sound with ui button click sound", player);
                 }
