@@ -26,6 +26,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -56,6 +57,7 @@ public class ModuleSwordBlocking extends OCMModule {
     private BukkitTask legacyTask;
     private long tickCounter;
     private int restoreDelay;
+    private boolean noItemModify;
     private boolean paperSupported;
     private Object paperAdapter;
     private java.lang.reflect.Method paperApply;
@@ -93,6 +95,7 @@ public class ModuleSwordBlocking extends OCMModule {
     @Override
     public void reload() {
         restoreDelay = module().getInt("restoreDelay", 40);
+        noItemModify = module().getBoolean("noItemModify", false);
         if (!paperSupported || paperAdapter == null) return;
         if (isEnabled()) return;
 
@@ -331,28 +334,34 @@ public class ModuleSwordBlocking extends OCMModule {
                 !player.hasPermission("oldcombatmechanics.swordblock")) return;
 
         if (supportsPaperAnimation(player)) {
+            if (noItemModify) {
+                modifySwords(player);
+                return;
+            }
+
             // Modern Paper path: we can provide a sword blocking animation via components, without swapping an
             // offhand shield. This avoids the legacy polling/restore tasks and avoids interfering with offhand
             // gameplay items (totems, food, etc.).
             // Set first, then re-read and patch the inventory-backed stack (CraftItemStack) so NMS components
             // are applied to the real server-side item.
-            inventory.setItemInMainHand(mainHandItem);
+            // inventory.setItemInMainHand(mainHandItem);
             final ItemStack invMain = inventory.getItemInMainHand();
             if (applyConsumableComponent(player, invMain)) {
                 inventory.setItemInMainHand(invMain);
             }
-            startUsingMainHandIfSupported(player);
+//            startUsingMainHandIfSupported(player);
             return;
-        }
-
-        if (stripConsumable(mainHandItem)) {
-            inventory.setItemInMainHand(mainHandItem);
         }
 
         final UUID id = player.getUniqueId();
 
         if (!isPlayerBlocking(player)) {
-            if (hasShield(inventory)) return;
+            if (hasShield(inventory)) {
+                if (stripConsumable(mainHandItem)) {
+                    inventory.setItemInMainHand(mainHandItem);
+                }
+                return;
+            }
             debug("Storing " + offHandItem, player);
             storedItems.put(id, offHandItem);
 
@@ -446,6 +455,10 @@ public class ModuleSwordBlocking extends OCMModule {
 
     private void restore(Player p, boolean force, boolean fromLegacyTask) {
         final UUID id = p.getUniqueId();
+
+        if (noItemModify) {
+            modifySwords(p);
+        }
 
         if (!areItemsStored(id)) return;
 
@@ -689,6 +702,7 @@ public class ModuleSwordBlocking extends OCMModule {
     }
 
     private boolean stripConsumable(ItemStack item) {
+        if (noItemModify) return false;
         if (!paperSupported || paperAdapter == null || paperClear == null || item == null) return false;
         if (item.getType() == Material.AIR || !isHoldingSword(item.getType())) return false;
         if (!hasConsumableComponent(item)) return false;
@@ -954,6 +968,25 @@ public class ModuleSwordBlocking extends OCMModule {
         legacyTask.cancel();
         legacyTask = null;
     }
+
+    private void modifySwords(Player player) {
+        Inventory inv = player.getInventory();
+        boolean updatedSwords = false;
+
+        for (int i = 0; i < inv.getSize(); i++) {
+            ItemStack iStack = inv.getItem(i);
+            if (iStack == null) continue;
+
+            if (applyConsumableComponent(player, iStack)) {
+                inv.setItem(i, iStack);
+                updatedSwords = true;
+            }
+        }
+
+        if (updatedSwords)
+            player.updateInventory();
+    }
+
 
     private static final class LegacySwordBlockState {
         private long restoreAtTick;

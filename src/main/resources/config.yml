@@ -245,6 +245,8 @@ sword-blocking:
   # If this is too slow, players will have a shield in their hand well after they've stopped blocking
   # 20 ticks = 1 second
   restoreDelay: 40
+  # Still maintain the sword blocking property when item is not held
+  noItemModify: true
   # Whether to require players to have oldcombatmechanics.swordblock permission to block with a sword
   use-permission: false
 
