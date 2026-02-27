@@ -345,14 +345,15 @@ public class ModuleSwordBlocking extends OCMModule {
             return;
         }
 
-        if (stripConsumable(mainHandItem)) {
-            inventory.setItemInMainHand(mainHandItem);
-        }
-
         final UUID id = player.getUniqueId();
 
         if (!isPlayerBlocking(player)) {
-            if (hasShield(inventory)) return;
+            if (hasShield(inventory)) {
+                if (stripConsumable(mainHandItem)) {
+                    inventory.setItemInMainHand(mainHandItem);
+                }
+                return;
+            }
             debug("Storing " + offHandItem, player);
             storedItems.put(id, offHandItem);
 
