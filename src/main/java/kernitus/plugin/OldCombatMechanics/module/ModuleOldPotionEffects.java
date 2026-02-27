@@ -16,18 +16,14 @@ import kernitus.plugin.OldCombatMechanics.utilities.potions.PotionEffects;
 import kernitus.plugin.OldCombatMechanics.utilities.potions.WeaknessCompensation;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.plugin.EventExecutor;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockDispenseEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.PotionMeta;
@@ -35,6 +31,8 @@ import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -71,6 +69,7 @@ public class ModuleOldPotionEffects extends OCMModule {
     private boolean weaknessAmplifierClamped;
     private boolean potionEffectListenerAttempted;
     private boolean potionEffectListenerBroken;
+    private boolean prioritizeCustomEffects;
     private Listener potionEffectListener;
     private Method potionEffectGetEntity;
     private Method potionEffectGetNewEffect;
@@ -85,6 +84,7 @@ public class ModuleOldPotionEffects extends OCMModule {
 
     @Override
     public void reload() {
+        prioritizeCustomEffects = module().getBoolean("prioritizeCustomEffects", false);
         durations = ConfigUtils.loadPotionDurationsList(module());
         weaknessAmplifierClamped = detectWeaknessAmplifierClamp();
         syncWeaknessCompensation();
@@ -107,31 +107,21 @@ public class ModuleOldPotionEffects extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onPotionDispense(BlockDispenseEvent event) {
-        if (!isEnabled(event.getBlock().getWorld())) return;
+    public void onProjectileHit(ProjectileHitEvent event) {
+        @NotNull Projectile proj = event.getEntity();
+        if (!(proj instanceof ThrownPotion potion)) return;
+        if (!isEnabled(potion.getWorld())) return;
 
-        final ItemStack item = event.getItem();
+        final ItemStack item = potion.getItem();
         final Material material = item.getType();
 
-        if (material == Material.SPLASH_POTION || material == Material.LINGERING_POTION)
-            adjustPotion(item, true);
-    }
-
-    // We change the potion on-the-fly just as it's thrown to be able to change the effect
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPotionThrow(PlayerInteractEvent event) {
-        final Player player = event.getPlayer();
-        if (!isEnabled(player)) return;
-
-        final Action action = event.getAction();
-        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
-
-        final ItemStack item = event.getItem();
-        if (item == null) return;
-
-        final Material material = item.getType();
-        if (material == Material.SPLASH_POTION || material == Material.LINGERING_POTION)
-            adjustPotion(item, true);
+        if (material == Material.SPLASH_POTION || material == Material.LINGERING_POTION) {
+            PotionMeta newPotionMeta = adjustPotion(item, true);
+            if (newPotionMeta != null) {
+                potion.setItem(item);
+                potion.setPotionMeta(newPotionMeta);
+            }
+        }
     }
 
     @Override
@@ -268,15 +258,24 @@ public class ModuleOldPotionEffects extends OCMModule {
      *
      * @param potionItem The potion item with adjusted duration and effects
      */
-    private void adjustPotion(ItemStack potionItem, boolean splash) {
+    private @Nullable PotionMeta adjustPotion(ItemStack potionItem, boolean splash) {
         final PotionMeta potionMeta = (PotionMeta) potionItem.getItemMeta();
-        if (potionMeta == null) return;
+        if (potionMeta == null) return null;
+        if (prioritizeCustomEffects && potionMeta.hasCustomEffects()) {
+            try { // For >=1.20
+                potionMeta.setBasePotionType(PotionType.WATER);
+            } catch (NoSuchMethodError e) {
+                potionMeta.setBasePotionData(new PotionData(PotionType.WATER));
+            }
+            potionItem.setItemMeta(potionMeta);
+            return potionMeta;
+        }
 
         PotionType potionType;
         String potionTypeName;
         try {
             potionType = potionMeta.getBasePotionType();
-            if (potionType == null) return;
+            if (potionType == null) return potionMeta;
             potionTypeName = potionType.name();
         } catch (NoSuchMethodError e) {
             potionType = potionMeta.getBasePotionData().getType();
@@ -289,13 +288,13 @@ public class ModuleOldPotionEffects extends OCMModule {
                 Messenger.warn("[%s] Unknown potion type '%s' encountered; old-potion-effects will not adjust it",
                         getModuleName(), potionTypeName);
             }
-            return;
+            return potionMeta;
         }
 
         final Integer duration = getPotionDuration(potionKey, splash);
         if (duration == null) {
             debug("Potion type " + potionKey.getDebugName() + " not found in config, leaving as is...");
-            return;
+            return potionMeta;
         }
 
         int amplifier = potionKey.isStrong() ? 1 : 0;
@@ -326,6 +325,7 @@ public class ModuleOldPotionEffects extends OCMModule {
         }
 
         potionItem.setItemMeta(potionMeta);
+        return potionMeta;
     }
 
 

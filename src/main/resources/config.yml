@@ -472,6 +472,10 @@ old-golden-apples:
 old-potion-effects:
   # This is to restore the 1.8 potion effects and duration
 
+  # If enabled, custom potion effects override base potion effects,
+  # so only those are applied.
+  prioritizeCustomEffects: true
+
   # DURATION: (in seconds)
   potion-durations:
     drinkable:
