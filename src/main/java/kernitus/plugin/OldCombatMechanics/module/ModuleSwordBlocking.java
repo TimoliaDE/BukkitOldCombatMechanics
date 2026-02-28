@@ -69,6 +69,7 @@ public class ModuleSwordBlocking extends OCMModule {
     private final Map<EntityInteractionKey, Long> handledEntityInteractions = new HashMap<>();
     private long nextEntityInteractionPruneAtNanos;
     private static ModuleSwordBlocking INSTANCE;
+    private BukkitTask task;
 
     // Only used <1.13, where BlockCanBuildEvent.getPlayer() is not available
     private Map<Location, UUID> lastInteractedBlocks;
@@ -93,6 +94,31 @@ public class ModuleSwordBlocking extends OCMModule {
         handledEntityInteractions.clear();
         nextEntityInteractionPruneAtNanos = 0L;
         noItemModify = module().getBoolean("noItemModify", false);
+
+        if (task != null) {
+            task.cancel();
+        }
+
+        if (isEnabled()) {
+            task = Bukkit.getScheduler().runTaskTimer(OCMMain.getInstance(), () -> {
+                if (!noItemModify && !isEnabled()) return;
+
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    PlayerInventory inv = player.getInventory();
+
+                    final ItemStack main = inv.getItemInMainHand();
+                    if (applyConsumableComponent(player, main)) {
+                        inv.setItemInMainHand(main);
+                    }
+
+                    final ItemStack off = inv.getItemInOffHand();
+                    if (applyConsumableComponent(player, off)) {
+                        inv.setItemInMainHand(off);
+                    }
+                }
+            }, 0, 1);
+        }
+
         if (!paperSupported || paperAdapter == null) return;
         if (isEnabled()) return;
 
@@ -271,7 +297,10 @@ public class ModuleSwordBlocking extends OCMModule {
     }
 
     private boolean supportsPaperAnimation(Player player) {
-        if (!paperSupported || paperAdapter == null) return false;
+        if (paperSupported) {
+            return true;
+        }
+        if (paperAdapter == null) return false;
         if (player == null) return false;
         if (minClientVersion == null) return false;
         try {
@@ -354,6 +383,14 @@ public class ModuleSwordBlocking extends OCMModule {
         }
 
         doShieldBlock(player);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        Player player = event.getPlayer();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -519,6 +556,16 @@ public class ModuleSwordBlocking extends OCMModule {
     @EventHandler(ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        if (noItemModify) {
+            modifySwords(player);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
+        Player player = event.getPlayer();
         if (!isEnabled(player)) return;
 
         if (noItemModify) {
@@ -710,7 +757,7 @@ public class ModuleSwordBlocking extends OCMModule {
                 && persistentDataContainerHas != null;
     }
 
-    private boolean isTemporaryLegacyShieldDrop(ItemStack item) {
+    public boolean isTemporaryLegacyShieldDrop(ItemStack item) {
         if (item == null || item.getType() != Material.SHIELD) return false;
         if (!canMarkTemporaryLegacyShield()) {
             // Safety-first fallback: without marker support we cannot reliably distinguish temporary shields from
