@@ -69,6 +69,7 @@ public class ModuleSwordBlocking extends OCMModule {
     private final Map<EntityInteractionKey, Long> handledEntityInteractions = new HashMap<>();
     private long nextEntityInteractionPruneAtNanos;
     private static ModuleSwordBlocking INSTANCE;
+    private BukkitTask task;
 
     // Only used <1.13, where BlockCanBuildEvent.getPlayer() is not available
     private Map<Location, UUID> lastInteractedBlocks;
@@ -93,6 +94,31 @@ public class ModuleSwordBlocking extends OCMModule {
         handledEntityInteractions.clear();
         nextEntityInteractionPruneAtNanos = 0L;
         noItemModify = module().getBoolean("noItemModify", false);
+
+        if (task != null) {
+            task.cancel();
+        }
+
+        if (isEnabled()) {
+            task = Bukkit.getScheduler().runTaskTimer(OCMMain.getInstance(), () -> {
+                if (!noItemModify || !isEnabled()) return;
+
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    PlayerInventory inv = player.getInventory();
+
+                    final ItemStack main = inv.getItemInMainHand();
+                    if (applyConsumableComponent(player, main)) {
+                        inv.setItemInMainHand(main);
+                    }
+
+                    final ItemStack off = inv.getItemInOffHand();
+                    if (applyConsumableComponent(player, off)) {
+                        inv.setItemInOffHand(off);
+                    }
+                }
+            }, 0, 1);
+        }
+
         if (!paperSupported || paperAdapter == null) return;
         if (isEnabled()) return;
 
@@ -271,7 +297,10 @@ public class ModuleSwordBlocking extends OCMModule {
     }
 
     private boolean supportsPaperAnimation(Player player) {
-        if (!paperSupported || paperAdapter == null) return false;
+        if (paperSupported) {
+            return true;
+        }
+        if (paperAdapter == null) return false;
         if (player == null) return false;
         if (minClientVersion == null) return false;
         try {
@@ -354,6 +383,14 @@ public class ModuleSwordBlocking extends OCMModule {
         }
 
         doShieldBlock(player);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        Player player = event.getPlayer();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -526,6 +563,16 @@ public class ModuleSwordBlocking extends OCMModule {
         }
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
+        if (noItemModify) {
+            modifySwords(player);
+        }
+    }
+
     @EventHandler
     public void onHotBarChange(PlayerItemHeldEvent e) {
         restore(e.getPlayer(), true);
@@ -621,6 +668,7 @@ public class ModuleSwordBlocking extends OCMModule {
             return;
         }
 
+        System.out.println("Abgebrochen: " + e.isCancelled());
         e.setCancelled(true);
     }
 
@@ -710,7 +758,7 @@ public class ModuleSwordBlocking extends OCMModule {
                 && persistentDataContainerHas != null;
     }
 
-    private boolean isTemporaryLegacyShieldDrop(ItemStack item) {
+    public boolean isTemporaryLegacyShieldDrop(ItemStack item) {
         if (item == null || item.getType() != Material.SHIELD) return false;
         if (!canMarkTemporaryLegacyShield()) {
             // Safety-first fallback: without marker support we cannot reliably distinguish temporary shields from
@@ -1132,7 +1180,7 @@ public class ModuleSwordBlocking extends OCMModule {
             final org.bukkit.inventory.Inventory eventTop = viewAtEvent == null ? null : viewAtEvent.getTopInventory();
             final org.bukkit.inventory.Inventory eventBottom = viewAtEvent == null ? null : viewAtEvent.getBottomInventory();
             // Apply/strip against the actual inventory after the swap has taken place.
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 final PlayerInventory inv = player.getInventory();
                 final ItemStack main = inv.getItemInMainHand();
                 final ItemStack off = inv.getItemInOffHand();
@@ -1147,13 +1195,20 @@ public class ModuleSwordBlocking extends OCMModule {
                         && inv.getHeldItemSlot() == heldSlotAtEvent
                         && viewMatches
                         && applyConsumableComponent(player, main);
+                System.out.println("_____________________________");
+                System.out.println("PlayerSwapHandItems: " + (main != null) + "; " + (off != null));
+                System.out.println("Main-Typ: " + main.getType());
+                System.out.println("Off-Typ: " + off.getType());
+
                 if (mainStripped || mainApplied) {
+                    System.out.println("Main Item gesetzt");
                     inv.setItemInMainHand(main);
                 }
                 if (offStripped) {
+                    System.out.println("Offhand applied");
                     inv.setItemInOffHand(off);
                 }
-            });
+            }, 30);
         }
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

@@ -20,7 +20,6 @@ import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
@@ -144,7 +143,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         ItemStack iStack = player.getActiveItem();
         ItemMeta iMeta = iStack.getItemMeta();
         boolean isNotModuleShield = iMeta == null ||
-                !iMeta.getPersistentDataContainer().has(ModuleSwordBlocking.KEY, PersistentDataType.STRING);
+                !ModuleSwordBlocking.getInstance().isTemporaryLegacyShieldDrop(iStack);
         return iStack.getType() == Material.SHIELD && isNotModuleShield;
     }
 
