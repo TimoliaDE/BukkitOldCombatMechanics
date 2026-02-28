@@ -19,11 +19,9 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockCanBuildEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
@@ -344,12 +342,12 @@ public class ModuleSwordBlocking extends OCMModule {
             // gameplay items (totems, food, etc.).
             // Set first, then re-read and patch the inventory-backed stack (CraftItemStack) so NMS components
             // are applied to the real server-side item.
-            // inventory.setItemInMainHand(mainHandItem);
+            inventory.setItemInMainHand(mainHandItem);
             final ItemStack invMain = inventory.getItemInMainHand();
             if (applyConsumableComponent(player, invMain)) {
                 inventory.setItemInMainHand(invMain);
             }
-//            startUsingMainHandIfSupported(player);
+            startUsingMainHandIfSupported(player);
             return;
         }
 
@@ -378,6 +376,53 @@ public class ModuleSwordBlocking extends OCMModule {
         scheduleLegacyRestore(player);
 
         applyConsumableComponent(player, mainHandItem);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        if (noItemModify) {
+            Item item = event.getItem();
+            ItemStack iStack = item.getItemStack();
+
+            if (applyConsumableComponent(player, iStack)) {
+                item.setItemStack(iStack);
+            }
+
+            modifySwords(player);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        if (noItemModify) {
+            modifySwords(player);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        if (noItemModify) {
+            modifySwords(player);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!isEnabled(player)) return;
+
+        if (noItemModify) {
+            modifySwords(player);
+        }
     }
 
     @EventHandler
@@ -413,6 +458,11 @@ public class ModuleSwordBlocking extends OCMModule {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent e) {
+        Player player = e.getPlayer();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
+
         if (areItemsStored(e.getPlayer().getUniqueId()))
             e.setCancelled(true);
     }
@@ -423,6 +473,9 @@ public class ModuleSwordBlocking extends OCMModule {
             return;
         }
         final Player player = (Player) e.getWhoClicked();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
         if (areItemsStored(player.getUniqueId())) {
             final ItemStack cursor = e.getCursor();
             final ItemStack current = e.getCurrentItem();
@@ -438,6 +491,10 @@ public class ModuleSwordBlocking extends OCMModule {
     public void onItemDrop(PlayerDropItemEvent e) {
         final Item is = e.getItemDrop();
         final Player p = e.getPlayer();
+
+        if (isEnabled(p) && noItemModify) {
+            modifySwords(p);
+        }
 
         if (areItemsStored(p.getUniqueId()) && is.getItemStack().getType() == Material.SHIELD) {
             e.setCancelled(true);
@@ -983,8 +1040,9 @@ public class ModuleSwordBlocking extends OCMModule {
             }
         }
 
-        if (updatedSwords)
+        if (updatedSwords) {
             player.updateInventory();
+        }
     }
 
 
