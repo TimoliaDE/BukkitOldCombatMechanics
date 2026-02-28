@@ -668,7 +668,6 @@ public class ModuleSwordBlocking extends OCMModule {
             return;
         }
 
-        System.out.println("Abgebrochen: " + e.isCancelled());
         e.setCancelled(true);
     }
 
@@ -1195,17 +1194,11 @@ public class ModuleSwordBlocking extends OCMModule {
                         && inv.getHeldItemSlot() == heldSlotAtEvent
                         && viewMatches
                         && applyConsumableComponent(player, main);
-                System.out.println("_____________________________");
-                System.out.println("PlayerSwapHandItems: " + (main != null) + "; " + (off != null));
-                System.out.println("Main-Typ: " + main.getType());
-                System.out.println("Off-Typ: " + off.getType());
 
                 if (mainStripped || mainApplied) {
-                    System.out.println("Main Item gesetzt");
                     inv.setItemInMainHand(main);
                 }
                 if (offStripped) {
-                    System.out.println("Offhand applied");
                     inv.setItemInOffHand(off);
                 }
             }, 30);
