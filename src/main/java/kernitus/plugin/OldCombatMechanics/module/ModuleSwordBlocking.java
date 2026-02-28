@@ -10,7 +10,6 @@ import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -28,26 +27,12 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.lang.reflect.Method;
 import java.util.*;
 
 public class ModuleSwordBlocking extends OCMModule {
-
-    public static final NamespacedKey KEY = new NamespacedKey(OCMMain.getInstance(),
-            "ocm.module_sword_blocking");
-
-    private static final ItemStack SHIELD;
-
-    static {
-        ItemStack iStack = new ItemStack(Material.SHIELD);
-        ItemMeta iMeta = iStack.getItemMeta();
-        iMeta.getPersistentDataContainer().set(KEY, PersistentDataType.STRING, "");
-        iStack.setItemMeta(iMeta);
-        SHIELD = iStack;
-    }
 
     // Not using WeakHashMaps here, for extra reliability
     private final Map<UUID, ItemStack> storedItems = new HashMap<>();
@@ -71,7 +56,18 @@ public class ModuleSwordBlocking extends OCMModule {
     private Method packetEventsGetPlayerManager;
     private Method packetEventsGetUser;
     private Method packetEventsGetClientVersion;
+    private Method packetEventsUserGetClientVersion;
     private Method packetEventsIsOlderThan;
+    private Object legacyShieldMarkerKey;
+    private Object legacyShieldMarkerByteType;
+    private Method itemMetaGetPersistentDataContainer;
+    private Method persistentDataContainerSet;
+    private Method persistentDataContainerHas;
+    private static final long ENTITY_INTERACTION_DEDUPE_WINDOW_NANOS = 75_000_000L;
+    private static final long ENTITY_INTERACTION_PRUNE_INTERVAL_NANOS = 250_000_000L;
+    private static final int ENTITY_INTERACTION_FORCE_PRUNE_SIZE = 128;
+    private final Map<EntityInteractionKey, Long> handledEntityInteractions = new HashMap<>();
+    private long nextEntityInteractionPruneAtNanos;
     private static ModuleSwordBlocking INSTANCE;
 
     // Only used <1.13, where BlockCanBuildEvent.getPlayer() is not available
@@ -87,12 +83,15 @@ public class ModuleSwordBlocking extends OCMModule {
 
         initialisePaperAdapter();
         initialisePacketEventsClientVersion();
-        Bukkit.getPluginManager().registerEvents(new ConsumableCleaner(), plugin);
+        initialiseLegacyShieldMarker();
+        Bukkit.getPluginManager().registerEvents(new ConsumableLifecycleHandler(), plugin);
     }
 
     @Override
     public void reload() {
         restoreDelay = module().getInt("restoreDelay", 40);
+        handledEntityInteractions.clear();
+        nextEntityInteractionPruneAtNanos = 0L;
         noItemModify = module().getBoolean("noItemModify", false);
         if (!paperSupported || paperAdapter == null) return;
         if (isEnabled()) return;
@@ -219,10 +218,12 @@ public class ModuleSwordBlocking extends OCMModule {
             final Class<?> packetEventsApiClass = Class.forName("kernitus.plugin.OldCombatMechanics.lib.packetevents.api.PacketEventsAPI", true, loader);
             final Class<?> playerManagerClass = Class.forName("kernitus.plugin.OldCombatMechanics.lib.packetevents.api.manager.player.PlayerManager", true, loader);
             final Class<?> clientVersionClass = Class.forName("kernitus.plugin.OldCombatMechanics.lib.packetevents.api.protocol.player.ClientVersion", true, loader);
+            final Class<?> userClass = Class.forName("kernitus.plugin.OldCombatMechanics.lib.packetevents.api.protocol.player.User", true, loader);
             packetEventsGetAPI = packetEventsClass.getMethod("getAPI");
             packetEventsGetPlayerManager = packetEventsApiClass.getMethod("getPlayerManager");
             packetEventsGetUser = playerManagerClass.getMethod("getUser", Object.class);
             packetEventsGetClientVersion = playerManagerClass.getMethod("getClientVersion", Object.class);
+            packetEventsUserGetClientVersion = userClass.getMethod("getClientVersion");
             packetEventsIsOlderThan = clientVersionClass.getMethod("isOlderThan", clientVersionClass);
             minClientVersion = Enum.valueOf((Class<? extends Enum>) clientVersionClass, "V_1_20_5");
         } catch (Throwable ignored) {
@@ -231,23 +232,63 @@ public class ModuleSwordBlocking extends OCMModule {
             packetEventsGetPlayerManager = null;
             packetEventsGetUser = null;
             packetEventsGetClientVersion = null;
+            packetEventsUserGetClientVersion = null;
             packetEventsIsOlderThan = null;
+        }
+    }
+
+    private void initialiseLegacyShieldMarker() {
+        try {
+            final Class<?> namespacedKeyClass = Class.forName("org.bukkit.NamespacedKey");
+            final Class<?> pluginClass = Class.forName("org.bukkit.plugin.Plugin");
+            final Class<?> itemMetaClass = Class.forName("org.bukkit.inventory.meta.ItemMeta");
+            final Class<?> persistentDataContainerClass = Class.forName("org.bukkit.persistence.PersistentDataContainer");
+            final Class<?> persistentDataTypeClass = Class.forName("org.bukkit.persistence.PersistentDataType");
+
+            legacyShieldMarkerKey = namespacedKeyClass
+                    .getConstructor(pluginClass, String.class)
+                    .newInstance(plugin, "temporary_legacy_shield");
+            legacyShieldMarkerByteType = persistentDataTypeClass.getField("BYTE").get(null);
+            itemMetaGetPersistentDataContainer = itemMetaClass.getMethod("getPersistentDataContainer");
+            persistentDataContainerSet = persistentDataContainerClass.getMethod(
+                    "set",
+                    namespacedKeyClass,
+                    persistentDataTypeClass,
+                    Object.class
+            );
+            persistentDataContainerHas = persistentDataContainerClass.getMethod(
+                    "has",
+                    namespacedKeyClass,
+                    persistentDataTypeClass
+            );
+        } catch (Throwable ignored) {
+            legacyShieldMarkerKey = null;
+            legacyShieldMarkerByteType = null;
+            itemMetaGetPersistentDataContainer = null;
+            persistentDataContainerSet = null;
+            persistentDataContainerHas = null;
         }
     }
 
     private boolean supportsPaperAnimation(Player player) {
         if (!paperSupported || paperAdapter == null) return false;
         if (player == null) return false;
-        if (minClientVersion == null) return true;
+        if (minClientVersion == null) return false;
         try {
             if (packetEventsGetAPI == null || packetEventsGetPlayerManager == null || packetEventsGetClientVersion == null || packetEventsIsOlderThan == null) {
-                return true;
+                return false;
             }
             final Object api = packetEventsGetAPI.invoke(null);
-            if (api == null) return true;
+            if (api == null) return false;
             final Object playerManager = packetEventsGetPlayerManager.invoke(api);
-            if (playerManager == null) return true;
-            final Object clientVersion = packetEventsGetClientVersion.invoke(playerManager, player);
+            if (playerManager == null) return false;
+            Object clientVersion = packetEventsGetClientVersion.invoke(playerManager, player);
+            if (clientVersion == null && packetEventsGetUser != null && packetEventsUserGetClientVersion != null) {
+                final Object user = packetEventsGetUser.invoke(playerManager, player);
+                if (user != null) {
+                    clientVersion = packetEventsUserGetClientVersion.invoke(user);
+                }
+            }
             if (clientVersion == null) return true;
             if (isUnknownClientVersion(clientVersion)) {
                 // During very early login or synthetic test players, PacketEvents may not have a User yet.
@@ -261,7 +302,7 @@ public class ModuleSwordBlocking extends OCMModule {
             final Object older = packetEventsIsOlderThan.invoke(clientVersion, minClientVersion);
             return !(older instanceof Boolean && (Boolean) older);
         } catch (Throwable ignored) {
-            return true;
+            return false;
         }
     }
 
@@ -300,10 +341,8 @@ public class ModuleSwordBlocking extends OCMModule {
         if (!isEnabled(player)) return;
 
         if (action != Action.RIGHT_CLICK_BLOCK && action != Action.RIGHT_CLICK_AIR) return;
-
         // If they clicked on an interactive block, the 2nd event with the offhand won't fire
         // This is also the case if the main hand item was used, e.g. a bow
-        // TODO right-clicking on a mob also only fires one hand
         if (action == Action.RIGHT_CLICK_BLOCK && e.getHand() == EquipmentSlot.HAND) return;
         if (e.isBlockInHand()) {
             if (lastInteractedBlocks != null) {
@@ -315,6 +354,69 @@ public class ModuleSwordBlocking extends OCMModule {
         }
 
         doShieldBlock(player);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onRightClickEntity(PlayerInteractEntityEvent event) {
+        Player player = event.getPlayer();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
+
+        handleEntityRightClick(event.getPlayer(), event.getRightClicked(), event.getHand());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onRightClickEntityAt(PlayerInteractAtEntityEvent event) {
+        Player player = event.getPlayer();
+        if (isEnabled(player) && noItemModify) {
+            modifySwords(player);
+        }
+
+        handleEntityRightClick(event.getPlayer(), event.getRightClicked(), event.getHand());
+    }
+
+    private void handleEntityRightClick(Player player, org.bukkit.entity.Entity clickedEntity, EquipmentSlot hand) {
+        if (player == null || clickedEntity == null) return;
+        if (!isEnabled(player)) return;
+        if (hand != EquipmentSlot.HAND) return;
+        if (!markEntityInteractionHandled(player, clickedEntity, hand)) return;
+        doShieldBlock(player);
+    }
+
+    private boolean markEntityInteractionHandled(Player player, org.bukkit.entity.Entity clickedEntity, EquipmentSlot hand) {
+        final long now = System.nanoTime();
+        lazyPruneHandledEntityInteractions(now, false);
+
+        final EntityInteractionKey key = new EntityInteractionKey(player.getUniqueId(), clickedEntity.getUniqueId(), hand);
+        final Long expiresAt = handledEntityInteractions.get(key);
+        if (expiresAt != null && expiresAt > now) {
+            return false;
+        }
+
+        handledEntityInteractions.put(key, now + ENTITY_INTERACTION_DEDUPE_WINDOW_NANOS);
+        lazyPruneHandledEntityInteractions(now, handledEntityInteractions.size() >= ENTITY_INTERACTION_FORCE_PRUNE_SIZE);
+        return true;
+    }
+
+    private void lazyPruneHandledEntityInteractions(long nowNanos, boolean force) {
+        if (!force && nowNanos < nextEntityInteractionPruneAtNanos) return;
+
+        final Iterator<Map.Entry<EntityInteractionKey, Long>> it = handledEntityInteractions.entrySet().iterator();
+        while (it.hasNext()) {
+            if (it.next().getValue() <= nowNanos) {
+                it.remove();
+            }
+        }
+        nextEntityInteractionPruneAtNanos = nowNanos + ENTITY_INTERACTION_PRUNE_INTERVAL_NANOS;
     }
 
     private void doShieldBlock(Player player) {
@@ -351,19 +453,18 @@ public class ModuleSwordBlocking extends OCMModule {
             return;
         }
 
+        if (stripConsumable(mainHandItem)) {
+            inventory.setItemInMainHand(mainHandItem);
+        }
+
         final UUID id = player.getUniqueId();
 
         if (!isPlayerBlocking(player)) {
-            if (hasShield(inventory)) {
-                if (stripConsumable(mainHandItem)) {
-                    inventory.setItemInMainHand(mainHandItem);
-                }
-                return;
-            }
+            if (hasShield(inventory)) return;
             debug("Storing " + offHandItem, player);
             storedItems.put(id, offHandItem);
 
-            inventory.setItemInOffHand(SHIELD);
+            inventory.setItemInOffHand(createTemporaryLegacyShield());
             // Force an inventory update to avoid ghost items
             player.updateInventory();
             // Best-effort: ask the server to start using the offhand item so blocking becomes visible immediately
@@ -436,6 +537,12 @@ public class ModuleSwordBlocking extends OCMModule {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerJoin(PlayerJoinEvent e) {
+        restore(e.getPlayer(), true);
+        stripConsumableState(e.getPlayer(), true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerLogout(PlayerQuitEvent e) {
         restore(e.getPlayer(), true);
     }
@@ -444,16 +551,59 @@ public class ModuleSwordBlocking extends OCMModule {
     public void onPlayerDeath(PlayerDeathEvent e) {
         final Player p = e.getEntity();
         final UUID id = p.getUniqueId();
-        if (!areItemsStored(id)) return;
+        final boolean hadMarkedTemporaryOffhand = hasTemporaryLegacyShieldMarker(p.getInventory().getItemInOffHand());
+        final ItemStack storedOffhand = storedItems.remove(id);
+        final LegacySwordBlockState removedLegacyState = legacyStates.remove(id);
+        if (storedOffhand == null && removedLegacyState == null) return;
 
-        //TODO what if they legitimately had a shield?
-        e.getDrops().replaceAll(item ->
-                item.getType() == Material.SHIELD ?
-                        storedItems.remove(id) : item
-        );
+        stopLegacyTaskIfIdle();
 
-        // Handle keepInventory = true
-        restore(p, true);
+        if (storedOffhand == null) {
+            return;
+        }
+
+        if (e.getKeepInventory()) {
+            p.getInventory().setItemInOffHand(storedOffhand);
+            return;
+        }
+
+        final List<ItemStack> drops = e.getDrops();
+        int temporaryShieldDropIndex = -1;
+        for (int i = 0; i < drops.size(); i++) {
+            if (isTemporaryLegacyShieldDrop(drops.get(i))) {
+                temporaryShieldDropIndex = i;
+                break;
+            }
+        }
+
+        // Synthetic/manual death events may construct shield drops without preserving item metadata.
+        // If we know the player had our marked temporary shield in offhand, allow a single shield rewrite.
+        if (temporaryShieldDropIndex < 0 && hadMarkedTemporaryOffhand && canMarkTemporaryLegacyShield()) {
+            temporaryShieldDropIndex = firstShieldDropIndex(drops);
+        }
+
+        if (temporaryShieldDropIndex >= 0) {
+            if (storedOffhand.getType() == Material.AIR) {
+                drops.remove(temporaryShieldDropIndex);
+            } else {
+                drops.set(temporaryShieldDropIndex, storedOffhand);
+            }
+            return;
+        }
+
+        if (storedOffhand.getType() != Material.AIR) {
+            drops.add(storedOffhand);
+        }
+    }
+
+    private int firstShieldDropIndex(List<ItemStack> drops) {
+        for (int i = 0; i < drops.size(); i++) {
+            final ItemStack item = drops.get(i);
+            if (item != null && item.getType() == Material.SHIELD) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -463,8 +613,15 @@ public class ModuleSwordBlocking extends OCMModule {
             modifySwords(player);
         }
 
-        if (areItemsStored(e.getPlayer().getUniqueId()))
-            e.setCancelled(true);
+        final UUID uuid = e.getPlayer().getUniqueId();
+        if (!areItemsStored(uuid)) return;
+
+        if (supportsPaperAnimation(e.getPlayer())) {
+            restore(e.getPlayer(), true);
+            return;
+        }
+
+        e.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -476,14 +633,14 @@ public class ModuleSwordBlocking extends OCMModule {
         if (isEnabled(player) && noItemModify) {
             modifySwords(player);
         }
-        if (areItemsStored(player.getUniqueId())) {
-            final ItemStack cursor = e.getCursor();
-            final ItemStack current = e.getCurrentItem();
-            if (cursor != null && cursor.getType() == Material.SHIELD ||
-                    current != null && current.getType() == Material.SHIELD) {
-                e.setCancelled(true);
-                restore(player, true);
-            }
+
+        if (!areItemsStored(player.getUniqueId())) {
+            return;
+        }
+
+        if (isSwapOffhandClick(e) || isTemporaryOffhandShieldClick(e)) {
+            e.setCancelled(true);
+            restore(player, true);
         }
     }
 
@@ -497,8 +654,87 @@ public class ModuleSwordBlocking extends OCMModule {
         }
 
         if (areItemsStored(p.getUniqueId()) && is.getItemStack().getType() == Material.SHIELD) {
-            e.setCancelled(true);
-            restore(p);
+            // Do not cancel here: this event can represent unrelated shield drops from inventory/hotbar.
+            // We only need to end legacy temporary-shield state immediately.
+            restore(p, true);
+        }
+    }
+
+    private boolean isTemporaryOffhandShieldClick(InventoryClickEvent event) {
+        if (event.getClickedInventory() == null) return false;
+        if (event.getClickedInventory().getType() != InventoryType.PLAYER) return false;
+        if (event.getSlot() != 40) return false;
+
+        final ItemStack current = event.getCurrentItem();
+        return current != null && current.getType() == Material.SHIELD;
+    }
+
+    private boolean isSwapOffhandClick(InventoryClickEvent event) {
+        try {
+            return event.getClick() == ClickType.SWAP_OFFHAND;
+        } catch (NoSuchFieldError ignored) {
+            return false;
+        }
+    }
+
+    private ItemStack createTemporaryLegacyShield() {
+        final ItemStack shield = new ItemStack(Material.SHIELD);
+        markTemporaryLegacyShield(shield);
+        return shield;
+    }
+
+    private void markTemporaryLegacyShield(ItemStack item) {
+        if (!canMarkTemporaryLegacyShield()) return;
+        if (item == null || item.getType() != Material.SHIELD) return;
+        try {
+            final ItemMeta meta = item.getItemMeta();
+            if (meta == null) return;
+            final Object persistentDataContainer = itemMetaGetPersistentDataContainer.invoke(meta);
+            if (persistentDataContainer == null) return;
+            persistentDataContainerSet.invoke(
+                    persistentDataContainer,
+                    legacyShieldMarkerKey,
+                    legacyShieldMarkerByteType,
+                    Byte.valueOf((byte) 1)
+            );
+            item.setItemMeta(meta);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private boolean canMarkTemporaryLegacyShield() {
+        return legacyShieldMarkerKey != null
+                && legacyShieldMarkerByteType != null
+                && itemMetaGetPersistentDataContainer != null
+                && persistentDataContainerSet != null
+                && persistentDataContainerHas != null;
+    }
+
+    private boolean isTemporaryLegacyShieldDrop(ItemStack item) {
+        if (item == null || item.getType() != Material.SHIELD) return false;
+        if (!canMarkTemporaryLegacyShield()) {
+            // Safety-first fallback: without marker support we cannot reliably distinguish temporary shields from
+            // legitimate plain shields, so avoid rewriting any shield drops.
+            return false;
+        }
+        return hasTemporaryLegacyShieldMarker(item);
+    }
+
+    private boolean hasTemporaryLegacyShieldMarker(ItemStack item) {
+        if (!canMarkTemporaryLegacyShield()) return false;
+        try {
+            final ItemMeta meta = item.getItemMeta();
+            if (meta == null) return false;
+            final Object persistentDataContainer = itemMetaGetPersistentDataContainer.invoke(meta);
+            if (persistentDataContainer == null) return false;
+            final Object marked = persistentDataContainerHas.invoke(
+                    persistentDataContainer,
+                    legacyShieldMarkerKey,
+                    legacyShieldMarkerByteType
+            );
+            return marked instanceof Boolean && (Boolean) marked;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -785,90 +1021,93 @@ public class ModuleSwordBlocking extends OCMModule {
         return paperSupported && paperAdapter != null && player != null && isEnabled(player);
     }
 
+    private void sweepConsumableState(Player player, boolean includeStorage) {
+        if (!paperSupported || paperAdapter == null || player == null) return;
+
+        final PlayerInventory inv = player.getInventory();
+        final boolean enabled = isEnabled(player);
+        final boolean supportsAnimation = supportsPaperAnimation(player);
+
+        // Offhand should never carry the component.
+        final ItemStack off = inv.getItemInOffHand();
+        if (stripConsumable(off)) {
+            inv.setItemInOffHand(off);
+        }
+
+        final ItemStack main = inv.getItemInMainHand();
+        if (supportsAnimation && enabled) {
+            if (applyConsumableComponent(player, main)) {
+                inv.setItemInMainHand(main);
+            }
+            if (!includeStorage) {
+                return;
+            }
+
+            // Keep only the held slot eligible for the component.
+            final int held = inv.getHeldItemSlot();
+            final ItemStack[] storage = inv.getStorageContents();
+            for (int i = 0; i < storage.length; i++) {
+                if (i == held) continue;
+                final ItemStack item = storage[i];
+                if (stripConsumable(item)) {
+                    inv.setItem(i, item);
+                }
+            }
+            return;
+        }
+
+        if (stripConsumable(main)) {
+            inv.setItemInMainHand(main);
+        }
+
+        if (!includeStorage) {
+            return;
+        }
+
+        final ItemStack[] storage = inv.getStorageContents();
+        for (int i = 0; i < storage.length; i++) {
+            final ItemStack item = storage[i];
+            if (stripConsumable(item)) {
+                inv.setItem(i, item);
+            }
+        }
+    }
+
+    private void stripConsumableState(Player player, boolean includeStorage) {
+        if (!paperSupported || paperAdapter == null || player == null) return;
+
+        final PlayerInventory inv = player.getInventory();
+
+        final ItemStack main = inv.getItemInMainHand();
+        if (stripConsumable(main)) {
+            inv.setItemInMainHand(main);
+        }
+
+        final ItemStack off = inv.getItemInOffHand();
+        if (stripConsumable(off)) {
+            inv.setItemInOffHand(off);
+        }
+
+        if (!includeStorage) {
+            return;
+        }
+
+        final ItemStack[] storage = inv.getStorageContents();
+        for (int i = 0; i < storage.length; i++) {
+            final ItemStack item = storage[i];
+            if (stripConsumable(item)) {
+                inv.setItem(i, item);
+            }
+        }
+    }
+
     private boolean isUnknownClientVersion(Object clientVersion) {
         if (!(clientVersion instanceof Enum)) return false;
         final String name = ((Enum<?>) clientVersion).name();
         return "UNKNOWN".equals(name) || "HIGHER_THAN_SUPPORTED_VERSIONS".equals(name);
     }
 
-    private class ConsumableCleaner implements Listener {
-        @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-        public void onInventoryClickPre(InventoryClickEvent event) {
-            if (!(event.getWhoClicked() instanceof Player)) return;
-            final Player player = (Player) event.getWhoClicked();
-            if (!shouldHandleConsumable(player) || !supportsPaperAnimation(player)) return;
-
-            // Avoid mutating cursor/current items on normal clicks; this has been observed to cause client-side
-            // inventory visual glitches on some server builds.
-            //
-            // We only strip for number-key hotbar swaps, where the involved hotbar stack is not part of the
-            // InventoryClickEvent's current/cursor pair.
-            if (event.getClick() != ClickType.NUMBER_KEY) {
-                return;
-            }
-
-            // Number-key hotbar swap: the hotbar item is involved even if it isn't the clicked slot.
-            final int hotbarButton = event.getHotbarButton();
-            if (hotbarButton >= 0 && hotbarButton <= 8) {
-                final ItemStack hotbar = player.getInventory().getItem(hotbarButton);
-                if (stripConsumable(hotbar)) {
-                    player.getInventory().setItem(hotbarButton, hotbar);
-                }
-            }
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-        public void onInventoryClickPost(InventoryClickEvent event) {
-            if (!(event.getWhoClicked() instanceof Player)) return;
-            final Player p = (Player) event.getWhoClicked();
-            if (!shouldHandleConsumable(p) || !supportsPaperAnimation(p)) return;
-            if (!shouldReapplyMainHandAfterClick(event, p)) return;
-
-            // Ensure the (possibly new) main-hand item has the component after the click resolves.
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                final PlayerInventory inv = p.getInventory();
-                final ItemStack main = inv.getItemInMainHand();
-                if (applyConsumableComponent(p, main)) {
-                    inv.setItemInMainHand(main);
-                }
-            });
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-        public void onInventoryDrag(InventoryDragEvent event) {
-            if (!(event.getWhoClicked() instanceof Player)) return;
-            final Player p = (Player) event.getWhoClicked();
-            if (!shouldHandleConsumable(p) || !supportsPaperAnimation(p)) return;
-
-            // Dragging can place items into multiple slots; strip only the slots affected by this event (no sweep),
-            // then re-apply to the actual main-hand item.
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                final org.bukkit.inventory.InventoryView view = p.getOpenInventory();
-                final int topSize = view.getTopInventory().getSize();
-                boolean touchedBottomInventory = false;
-                for (Integer rawSlot : event.getRawSlots()) {
-                    if (rawSlot < topSize) {
-                        continue;
-                    }
-                    touchedBottomInventory = true;
-                    final ItemStack item = view.getItem(rawSlot);
-                    if (stripConsumable(item)) {
-                        view.setItem(rawSlot, item);
-                    }
-                }
-
-                if (!touchedBottomInventory) {
-                    return;
-                }
-
-                final PlayerInventory inv = p.getInventory();
-                final ItemStack main = inv.getItemInMainHand();
-                if (applyConsumableComponent(p, main)) {
-                    inv.setItemInMainHand(main);
-                }
-            });
-        }
-
+    private class ConsumableLifecycleHandler implements Listener {
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onHeld(PlayerItemHeldEvent event) {
             if (!shouldHandleConsumable(event.getPlayer()) || !supportsPaperAnimation(event.getPlayer())) return;
@@ -886,15 +1125,28 @@ public class ModuleSwordBlocking extends OCMModule {
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onSwap(PlayerSwapHandItemsEvent event) {
-            if (!shouldHandleConsumable(event.getPlayer()) || !supportsPaperAnimation(event.getPlayer())) return;
+            final Player player = event.getPlayer();
+            if (!shouldHandleConsumable(player) || !supportsPaperAnimation(player)) return;
+            final int heldSlotAtEvent = player.getInventory().getHeldItemSlot();
+            final org.bukkit.inventory.InventoryView viewAtEvent = player.getOpenInventory();
+            final org.bukkit.inventory.Inventory eventTop = viewAtEvent == null ? null : viewAtEvent.getTopInventory();
+            final org.bukkit.inventory.Inventory eventBottom = viewAtEvent == null ? null : viewAtEvent.getBottomInventory();
             // Apply/strip against the actual inventory after the swap has taken place.
             Bukkit.getScheduler().runTask(plugin, () -> {
-                final PlayerInventory inv = event.getPlayer().getInventory();
+                final PlayerInventory inv = player.getInventory();
                 final ItemStack main = inv.getItemInMainHand();
                 final ItemStack off = inv.getItemInOffHand();
                 final boolean mainStripped = stripConsumable(main);
                 final boolean offStripped = stripConsumable(off);
-                final boolean mainApplied = applyConsumableComponent(event.getPlayer(), main);
+                final org.bukkit.inventory.InventoryView currentView = player.getOpenInventory();
+                final boolean viewMatches = currentView != null
+                        && currentView.getTopInventory() == eventTop
+                        && currentView.getBottomInventory() == eventBottom;
+                final boolean mainApplied = shouldHandleConsumable(player)
+                        && supportsPaperAnimation(player)
+                        && inv.getHeldItemSlot() == heldSlotAtEvent
+                        && viewMatches
+                        && applyConsumableComponent(player, main);
                 if (mainStripped || mainApplied) {
                     inv.setItemInMainHand(main);
                 }
@@ -918,52 +1170,12 @@ public class ModuleSwordBlocking extends OCMModule {
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onQuit(PlayerQuitEvent event) {
-            if (!shouldHandleConsumable(event.getPlayer()) || !supportsPaperAnimation(event.getPlayer())) return;
-            final PlayerInventory inv = event.getPlayer().getInventory();
-            final ItemStack main = inv.getItemInMainHand();
-            final ItemStack off = inv.getItemInOffHand();
-            final boolean mainStripped = stripConsumable(main);
-            final boolean offStripped = stripConsumable(off);
-            if (mainStripped) {
-                inv.setItemInMainHand(main);
-            }
-            if (offStripped) {
-                inv.setItemInOffHand(off);
-            }
+            stripConsumableState(event.getPlayer(), true);
         }
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onWorldChange(PlayerChangedWorldEvent event) {
-            if (!shouldHandleConsumable(event.getPlayer()) || !supportsPaperAnimation(event.getPlayer())) return;
-            final PlayerInventory inv = event.getPlayer().getInventory();
-            final ItemStack main = inv.getItemInMainHand();
-            final ItemStack off = inv.getItemInOffHand();
-            final boolean mainStripped = stripConsumable(main);
-            final boolean offStripped = stripConsumable(off);
-            final boolean mainApplied = applyConsumableComponent(event.getPlayer(), main);
-            if (mainStripped || mainApplied) {
-                inv.setItemInMainHand(main);
-            }
-            if (offStripped) {
-                inv.setItemInOffHand(off);
-            }
-        }
-
-        private boolean shouldReapplyMainHandAfterClick(InventoryClickEvent event, Player player) {
-            if (event.getClick() == ClickType.MIDDLE) {
-                return false;
-            }
-
-            if (event.getClick() == ClickType.NUMBER_KEY) {
-                return event.getHotbarButton() == player.getInventory().getHeldItemSlot();
-            }
-
-            final org.bukkit.inventory.Inventory clicked = event.getClickedInventory();
-            if (clicked == null || clicked.getType() != InventoryType.PLAYER) {
-                return false;
-            }
-
-            return event.getSlot() == player.getInventory().getHeldItemSlot();
+            stripConsumableState(event.getPlayer(), true);
         }
     }
 
@@ -1049,5 +1261,32 @@ public class ModuleSwordBlocking extends OCMModule {
     private static final class LegacySwordBlockState {
         private long restoreAtTick;
         private long nextBlockingCheckTick;
+    }
+
+    private static final class EntityInteractionKey {
+        private final UUID playerId;
+        private final UUID entityId;
+        private final EquipmentSlot hand;
+
+        private EntityInteractionKey(UUID playerId, UUID entityId, EquipmentSlot hand) {
+            this.playerId = playerId;
+            this.entityId = entityId;
+            this.hand = hand;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            final EntityInteractionKey that = (EntityInteractionKey) o;
+            return Objects.equals(playerId, that.playerId)
+                    && Objects.equals(entityId, that.entityId)
+                    && hand == that.hand;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(playerId, entityId, hand);
+        }
     }
 }

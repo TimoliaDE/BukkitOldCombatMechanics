@@ -89,6 +89,13 @@ This file captures repo-specific context discovered while working on this branch
   - `ORG_GRADLE_JAVA_INSTALLATIONS_PATHS=/path/to/jdk8:/path/to/jdk17:/path/to/jdk25 ./gradlew integrationTest`
 
 ## Notes
+- Removed the dead reflection utility `ClassType` and the unused `Reflector#getClass(ClassType, String)` overload; `Reflector#getClass(String)` remains the supported class-resolution helper.
+- `SpigotFunctionChooser` now only falls back for compatibility-style failures (LinkageError family, missing-method/class reflection failures, and explicit compatibility-signalled `UnsupportedOperationException` via `compat`/`compatibility` markers), and rethrows ordinary runtime logic failures instead of silently selecting fallback (for example generic "incompatible" wording does not trigger fallback).
+- `AttackCompat` now only treats Bukkit `Player#attack` as success when it yields an observable living-target hit (health/lastDamage/noDamageTicks signal); otherwise it falls back to NMS attack candidates.
+- `AttackCompat` now treats boolean-return NMS attack methods that return `false` as failed attempts and continues trying other candidates, with expanded failure diagnostics including false-result and exception counts.
+- Entity-click dedupe in `ModuleSwordBlocking` now uses a taskless lazy-prune timestamp map (`System.nanoTime`) instead of a one-tick scheduled set clear, with a short dedupe window and periodic/size-triggered expiry pruning.
+- `ModuleSwordBlocking` now handles `PlayerInteractEntityEvent` and `PlayerInteractAtEntityEvent` for main-hand sword blocking, with short time-window dedupe to prevent duplicate side effects when both events fire for the same click.
+- Removed the unused main-source Java tester package (`kernitus.plugin.OldCombatMechanics.tester`), deleted stale commented test-command code from `OCMCommandHandler`, and dropped the now-obsolete Gradle source-set exclusion for that package.
 - Paper 1.12 sometimes fails to download legacy vanilla jar from old Mojang endpoint. The custom `downloadVanilla` task fixes that by using the v2 manifest.
 - 1.21.11 servers log hostname warnings and Unsafe warnings; tests still pass.
 - 1.9 integration tests are currently on hold per user request.
@@ -106,7 +113,7 @@ This file captures repo-specific context discovered while working on this branch
 - `ModuleSwordBlocking` no longer version-gates Paper support; it feature-detects Paper data component APIs and avoids ConcurrentModificationException by iterating legacy tick state over a snapshot.
 - Do not gate behaviour on hard-coded Minecraft version numbers; use feature detection (class/method presence) because some servers backport APIs.
 - Weapon/armour unknown-enchantment warnings only fire for non-`minecraft` namespaces; legacy servers fall back to a known vanilla-enchantment list to avoid warning on built-ins.
-- For NMS access, prefer the project Reflector helpers (`utilities.reflection.Reflector` + `ClassType`) over ad-hoc reflection, and avoid hard-coded versioned class names where heuristics (signatures/fields) can locate methods safely.
+- For NMS access, prefer the project Reflector helpers (`utilities.reflection.Reflector`) over ad-hoc reflection, and avoid hard-coded versioned class names where heuristics (signatures/fields) can locate methods safely.
 - Added integration tests in `OldPotionEffectsIntegrationTest` for strength addend scaling (Strength II and III), a distinct modifier value check, and strength multiplier scaling.
 - Added integration test ensuring vanilla strength addend applies when `old-potion-effects` is disabled.
 - Strength modifier in `OCMEntityDamageByEntityEvent` now stores per-level value (3) and applies level when reconstructing base damage.
@@ -176,6 +183,7 @@ This file captures repo-specific context discovered while working on this branch
 - Added `DisableOffhandReflectionIntegrationTest` (in `KotestRunner` list) to ensure reflective access to `InventoryView#getBottomInventory`/`getTopInventory` works on non-public CraftBukkit view implementations.
 - `Reflector.getMethod` overloads now include declared methods and call `setAccessible(true)` to avoid `IllegalAccessException` when CraftBukkit uses non-public view classes (e.g. `CraftContainer$1` on 1.20.1).
 - Added `AttackRangeIntegrationTest` (1.21.11+) to assert vanilla hits at ~3.6 blocks and 1.8-style attack_range reduces reach so the same hit misses; registered in `KotestRunner`.
+- Removed the cancelled S3-only `AttackRangeIntegrationTest` case `swap hand keeps attack-range off offhand sword (Paper 1.21.11+)` so ongoing S6 validation is not blocked by a parked slice artefact.
 - InvulnerabilityDamageIntegrationTest adds a case asserting environmental damage above the baseline applies during invulnerability (manual EntityDamageEvent).
 - `gradle.properties` gameVersions list now includes 1.21.11 down to 1.21.1 (plus 1.21) ahead of existing entries.
 - GitHub release asset now keeps a stable filename `OldCombatMechanics.jar` (no version suffix); the CurseForge upload uses the same path.
@@ -210,7 +218,25 @@ This file captures repo-specific context discovered while working on this branch
 - `ModuleSwordBlocking#onItemDrop` no longer cancels shield drops while legacy fallback state is active; it now force-restores the temporary shield state immediately to avoid trapping unrelated shield drops.
 - `ModuleSwordBlocking#isPlayerBlocking` now requires an actual offhand shield before treating `isBlocking`/`isHandRaised` as legacy shield-blocking, preventing stale hand-use state from suppressing fallback shield injection.
 - `ModuleSwordBlocking#supportsPaperAnimation` now falls back to `User#getClientVersion` when `PlayerManager#getClientVersion` is null, improving old-client fallback stability in synthetic/integration scenarios.
+- `ModuleSwordBlocking#supportsPaperAnimation` now fails safe to legacy shield fallback when PacketEvents client-version resolution is unavailable (resolver initialisation missing, resolver methods/objects null, or reflection errors), while preserving existing behaviour for normal early-login/synthetic-player cases.
+- `ModuleSwordBlocking#onPlayerSwapHandItems` now treats stale legacy stored-shield state as non-authoritative for Paper-animation players: it clears stale legacy entries instead of cancelling swaps, so synthetic swap listeners still run.
+- `ModuleSwordBlocking#onPlayerSwapHandItems` now restores any stale legacy stored offhand item (via `restore(..., true)`) before clearing legacy state on the Paper-animation path, so stale entries are not silently discarded.
+- `ConsumableCleaner#onSwap` now snapshots the held hotbar slot and only reapplies the Paper consumable component when the slot is unchanged on the deferred tick; offhand stripping remains deferred as before.
 - The new legacy-scope regressions now pass on 1.19.2 and 1.21.11.
+- `ModuleSwordBlocking.ConsumableCleaner#onInventoryClickPost` now snapshots click context (held slot and open inventory top/bottom) and skips next-tick reapply when that context is stale, preventing deferred reapply from tainting a newly selected main-hand sword.
+- Added `ConsumableComponentIntegrationTest` coverage for stale `PlayerSwapHandItemsEvent` deferred reapply: if held slot changes before next tick, the newly selected main-hand sword must not gain a consumable component, while swapped-offhand sword cleanup still occurs.
+- Added `ConsumableComponentIntegrationTest` regression coverage for stale `PlayerSwapHandItemsEvent` deferred reapply when the open inventory view changes before next tick: the new main-hand context must not be tainted, while swapped-offhand consumable cleanup must still run.
+- `ModuleSwordBlocking.ConsumableCleaner#onSwap` now snapshots open-inventory top/bottom identity at swap time and requires a view match only for deferred main-hand reapply; deferred offhand consumable cleanup still runs even when the view changed.
+- `ModuleSwordBlocking.ConsumableCleaner` click/drag handlers now follow a minimal-mutation policy (no proactive consumable strip/apply in `InventoryClickEvent` or `InventoryDragEvent` paths); cleanup is handled opportunistically via lifecycle/transition handlers (`onModesetChange`/`reload`/world-change, held-slot, and swap paths) using a shared per-player consumable sweep helper.
+- `ModuleSwordBlocking#onModesetChange` now force-restores stale legacy fallback shield state (`restore(..., true)`) when sword-blocking becomes disabled for a player, before sweeping Paper consumable components.
+- `ModuleSwordBlocking.ConsumableCleaner#onWorldChange` now strips consumable components from main hand, offhand, and stored swords without re-applying, so world changes clear stale consumable state consistently.
+- `ModuleSwordBlocking.ConsumableCleaner#onQuit` now uses the same strip-only full sweep as world-change cleanup (main hand, offhand, and stored swords), ensuring logout clears stale consumable state from storage as well.
+- `ModuleSwordBlocking` now handles `PlayerJoinEvent` with a force legacy restore (`restore(..., true)`) followed by strip-only consumable cleanup (main hand, offhand, and stored swords), so join clears stale state without re-applying consumable components.
+- `ModuleSwordBlocking` inner listener `ConsumableCleaner` was renamed to `ConsumableLifecycleHandler` (registration updated; behaviour unchanged).
+- Legacy sword-blocking now marks injected temporary offhand shields when marker APIs are available so death handling can identify the temporary drop path reliably.
+- `ModuleSwordBlocking#onPlayerDeath` now pops stored offhand exactly once, clears legacy state deterministically, respects `keepInventory` without rewriting drops, rewrites at most one temporary shield drop, and adds the stored offhand drop when no temporary shield drop is found.
+- Legacy shield-drop reconciliation now uses a strict safety-first fallback when marker APIs are unavailable: it does not guess temporary shields from plain shield shape, avoiding accidental replacement of legitimate shields (stored offhand is appended instead).
+- For synthetic/manual death events where drop metadata may not preserve the temporary-shield marker, `ModuleSwordBlocking#onPlayerDeath` allows a single shield-drop rewrite only when the player offhand was verified as marker-tagged at death time.
 
 ## Fire aspect / fire tick test notes
 - `FireAspectOverdamageIntegrationTest` now uses a Zombie victim for real fire tick sampling, with max health boosted (via MAX_HEALTH attribute) to survive rapid clicking.
