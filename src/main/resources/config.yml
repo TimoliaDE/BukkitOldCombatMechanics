@@ -107,6 +107,22 @@ disable-attack-cooldown:
   excludeLungeSpears: true
   # What to set the attack speed to. Default for 1.9 is 4, at least 40 is needed for no cooldown.
   generic-attack-speed: 80
+  # Optional per-material override for the item in the player's main hand.
+  # Materials not listed here fall back to generic-attack-speed.
+  # The bundled defaults keep most items at no cooldown, while trident, mace,
+  # and spears retain more vanilla-like attack speeds.
+  # Newer-version material keys that are unavailable on the current server are
+  # ignored safely.
+  held-item-attack-speeds:
+    TRIDENT: 1.1
+    MACE: 0.6
+    WOODEN_SPEAR: 1.54
+    GOLDEN_SPEAR: 1.05
+    STONE_SPEAR: 1.33
+    COPPER_SPEAR: 1.18
+    IRON_SPEAR: 1.05
+    DIAMOND_SPEAR: 0.95
+    NETHERITE_SPEAR: 0.87
 
 attack-frequency:
   # Allows changing the player invulnerability between hits
@@ -240,6 +256,11 @@ shield-damage-reduction:
   noSnowballs: true
 
 sword-blocking:
+  # This is to allow players to block with swords again, by getting a shield while they hold right click with a sword
+  # Paper 1.20.5+ uses a consumable-based blocking animation. Older/Paperless servers fall back to an offhand shield.
+  # With ViaVersion, clients older than 1.20.5 will also fall back to the shield behaviour.
+  # Set to false to disable the Paper animation path entirely and always use the legacy shield fallback.
+  paper-animation: true
   # How often, in ticks, OCM should check if the player is still blocking with a shield, and remove it if not
   # If this is too fast, the player will have their shield disappear before they're able to block again causing a slight delay
   # If this is too slow, players will have a shield in their hand well after they've stopped blocking
@@ -671,7 +692,7 @@ update-checker:
   # The update is applied on the next restart/reload of the server
   # Auto update is disabled if Spigot version is below 1.18.1 and force-below-1-18-1-config-upgrade is false
   # This is to prevent accidentally resetting the config
-  auto-update: true
+  auto-update: false
 
 # Whether to force config upgrade even in Spigot versions below 1.18.1
 # This is not advised, as all the comments would be removed
@@ -686,4 +707,4 @@ debug:
   enabled: false
 
 # DO NOT CHANGE THIS NUMBER AS IT WILL RESET YOUR CONFIG
-config-version: 72
+config-version: 73
