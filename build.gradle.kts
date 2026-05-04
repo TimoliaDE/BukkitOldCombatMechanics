@@ -6,9 +6,9 @@
 
 plugins {
     `java-library`
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.19"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
     id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
-    id("com.gradleup.shadow") version "9.3.0"
+    id("com.gradleup.shadow") version "9.4.1"
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
@@ -50,7 +50,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.3")
-    compileOnly("com.viaversion:viaversion-api:5.6.0")
+    compileOnly("com.viaversion:viaversion-api:5.9.0")
     implementation("com.github.retrooper:packetevents-spigot:2.11.2")
 }
 
