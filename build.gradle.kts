@@ -40,6 +40,8 @@ dependencies {
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
     // ProtocolLib
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
+    // PacketEvents
+    implementation("com.github.retrooper:packetevents-spigot:2.12.1")
     // XSeries
     implementation("com.github.cryptomorin:XSeries:13.6.0")
 
@@ -51,13 +53,12 @@ dependencies {
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.3")
     compileOnly("com.viaversion:viaversion-api:5.9.0")
-    implementation("com.github.retrooper:packetevents-spigot:2.11.2")
 }
 
 java {
-    // Configure the java toolchain. This allows gradle to auto-provision JDK 21 on systems
+    // Configure the java toolchain. This allows gradle to auto-provision JDK 25 on systems
     // that only have JDK 11 installed for example.
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
 }
 
 tasks {
@@ -73,7 +74,7 @@ tasks {
 
         // Set the release flag. This configures what version bytecode the compiler will emit, as well as what JDK APIs are usable.
         // See https://openjdk.java.net/jeps/247 for more information.
-        options.release.set(21)
+        options.release.set(25)
     }
     javadoc {
         options.encoding = Charsets.UTF_8.name() // We want UTF-8 for everything
