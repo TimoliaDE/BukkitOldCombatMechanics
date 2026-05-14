@@ -9,6 +9,15 @@ plugins {
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
     id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
     id("com.gradleup.shadow") version "9.4.1"
+    idea
+}
+
+// Make sure javadocs are available to IDE
+idea {
+    module {
+        isDownloadJavadoc = true
+        isDownloadSources = true
+    }
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
@@ -84,7 +93,7 @@ tasks {
         val props = mapOf(
             "name" to project.name,
             "version" to project.version,
-            "description" to project.description,
+            "description" to (project.description ?: ""),
             "apiVersion" to "1.19"
         )
         inputs.properties(props)
