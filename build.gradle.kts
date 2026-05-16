@@ -61,7 +61,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.3")
-    compileOnly("com.viaversion:viaversion-api:5.9.0")
+    compileOnly("com.viaversion:viaversion-api:5.9.1")
 }
 
 java {
