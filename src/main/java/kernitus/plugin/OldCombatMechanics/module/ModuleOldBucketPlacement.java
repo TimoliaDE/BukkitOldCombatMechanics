@@ -4,6 +4,7 @@ import com.mojang.datafixers.util.Pair;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.BucketUtil;
 import kernitus.plugin.OldCombatMechanics.versions.BlockUtil;
+import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -32,6 +33,8 @@ import java.util.*;
  */
 public class ModuleOldBucketPlacement extends OCMModule {
 
+    private boolean onlyForLegacy;
+
     private static final Map<UUID, ItemStack> filledBuckets = new HashMap<>();
     private static final Map<UUID, Pair<ItemStack, Material>> emptyBuckets = new HashMap<>();
 
@@ -39,11 +42,16 @@ public class ModuleOldBucketPlacement extends OCMModule {
         super(plugin, "old-bucket-placement");
     }
 
+    public void reload() {
+        onlyForLegacy = module().getBoolean("onlyForLegacy", true);
+    }
+
     @EventHandler(priority = EventPriority.LOW)
     public void onPlayerBucketEmpty(PlayerBucketEmptyEvent event) {
         Player player = event.getPlayer();
         if (!isEnabled(player)) return;
         if (event.isCancelled()) return;
+        if (onlyForLegacy && !ViaVersionUtil.isLegacyClient(player)) return;
 
         Block clicked = event.getBlockClicked();
 
@@ -62,6 +70,7 @@ public class ModuleOldBucketPlacement extends OCMModule {
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        if (onlyForLegacy && !ViaVersionUtil.isLegacyClient(player)) return;
 
         Action action = event.getAction();
         if (!action.isRightClick()) return;

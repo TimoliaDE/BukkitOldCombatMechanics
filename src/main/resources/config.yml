@@ -391,6 +391,8 @@ old-bucket-placement:
   # Matches water placement behavior of version 1.8 by placing water
   # next to a waterlogged block instead of directly on it.
   # Also fixes water placement for 1.8 clients when using newer server versions.
+  # If enabled, this does not affect modern clients (versions newer than 1.9).
+  onlyForLegacy: true
 
 damage-inside-wall:
   # This causes the player to take 1 damage every 10 ticks
