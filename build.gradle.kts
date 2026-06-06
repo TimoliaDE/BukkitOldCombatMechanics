@@ -37,21 +37,14 @@ allprojects {
 
 dependencies {
     implementation("org.bstats:bstats-bukkit:3.2.1")
-    // Server-provided: intentionally pinned to the oldest supported runtime baseline
-    // (Minecraft 1.9.4 / Netty 4.0.23.Final) so compile-only code cannot use newer Netty APIs unavailable on legacy servers.
-    compileOnly("io.netty:netty-all:4.0.23.Final")
+    // Shaded in by Bukkit
+    compileOnly("io.netty:netty-all:4.1.130.Final")
     // Placeholder API
     compileOnly("me.clip:placeholderapi:2.12.2")
     // For BSON file serialisation
     implementation("org.mongodb:bson:5.6.2")
 //    // Spigot
 //    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
-    implementation("org.mongodb:bson:5.8.0")
-    // Spigot
-    compileOnly("org.spigotmc:spigot-api:26.1.2-R0.1-SNAPSHOT")
-    testImplementation("io.kotest:kotest-runner-junit5-jvm:5.9.1")
-    testImplementation("io.kotest:kotest-assertions-core-jvm:5.9.1")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     // JSR-305 annotations (javax.annotation.Nullable)
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
     // ProtocolLib

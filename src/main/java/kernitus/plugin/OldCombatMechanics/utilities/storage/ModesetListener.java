@@ -19,7 +19,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.event.world.WorldUnloadEvent;
 
@@ -100,11 +99,12 @@ public class ModesetListener extends OCMModule {
         updateModeset(player, player.getWorld(), null, PlayerModesetChangeEvent.Reason.JOIN);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        final Player player = event.getPlayer();
-        PlayerModuleOverrides.clearAll(player);
-    }
+    // Edit
+//    @EventHandler(priority = EventPriority.LOWEST)
+//    public void onPlayerQuit(PlayerQuitEvent event) {
+//        final Player player = event.getPlayer();
+//        PlayerModuleOverrides.clearAll(player);
+//    }
 
     @EventHandler(ignoreCancelled = false)
     public void onWorldLoad(WorldLoadEvent event) {

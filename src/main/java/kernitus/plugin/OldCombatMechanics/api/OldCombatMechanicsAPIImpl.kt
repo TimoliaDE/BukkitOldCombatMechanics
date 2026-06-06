@@ -181,9 +181,10 @@ class OldCombatMechanicsAPIImpl(private val plugin: OCMMain) : OldCombatMechanic
         previousOverride: PlayerModuleOverride,
         newOverride: PlayerModuleOverride,
     ) {
-        Bukkit.getPluginManager().callEvent(
-            PlayerModuleOverrideChangeEvent(player, moduleName, previousOverride, newOverride),
-        )
+        // Edit
+//        Bukkit.getPluginManager().callEvent(
+//            PlayerModuleOverrideChangeEvent(player, moduleName, previousOverride, newOverride),
+//        )
     }
 
     private fun notifyPlayerStateChanged(player: Player) {

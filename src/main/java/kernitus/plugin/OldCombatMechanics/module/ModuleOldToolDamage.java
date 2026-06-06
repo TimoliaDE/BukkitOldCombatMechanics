@@ -85,14 +85,18 @@ public class ModuleOldToolDamage extends OCMModule {
 
         if (!isEnabledForAttacker(damager)) return;
 
+        final int sharpnessLevel = event.getSharpnessLevel();
         final ItemStack weapon = event.getWeapon();
         final Material weaponMaterial = weapon.getType();
         final String weaponName = weaponMaterial.name();
         debug("Weapon material: " + weaponMaterial);
 
-        if (!isWeapon(weaponMaterial)) return;
+        boolean isWeapon = isWeapon(weaponMaterial);
+        if (!isWeapon && sharpnessLevel <= 0) return;
 
-        final double newWeaponBaseDamage = WeaponDamages.getDamage(weaponMaterial);
+        // Items that cannot be enchanted with Sharpness in vanilla
+        // should always have the default base damage of 1
+        final double newWeaponBaseDamage = isWeapon ? WeaponDamages.getDamage(weaponMaterial) : 1;
         if (newWeaponBaseDamage <= 0) {
             debug("Unknown tool type: " + weaponMaterial, damager);
             return;
@@ -142,7 +146,6 @@ public class ModuleOldToolDamage extends OCMModule {
 
 
         // Set sharpness to 1.8 damage value
-        final int sharpnessLevel = event.getSharpnessLevel();
         double newSharpnessDamage = oldSharpness ?
                 DamageUtils.getOldSharpnessDamage(sharpnessLevel) :
                 DamageUtils.getNewSharpnessDamage(sharpnessLevel);

@@ -43,7 +43,7 @@ public class ModuleOldBucketPlacement extends OCMModule {
     }
 
     public void reload() {
-        onlyForLegacy = module().getBoolean("onlyForLegacy", true);
+        onlyForLegacy = module().getBoolean("onlyForLegacy", false);
     }
 
     @EventHandler(priority = EventPriority.LOW)
