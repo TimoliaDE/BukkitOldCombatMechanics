@@ -14,10 +14,12 @@ import kernitus.plugin.OldCombatMechanics.utilities.reflection.SpigotFunctionCho
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.VersionCompatUtils;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
@@ -59,14 +61,13 @@ public class DefenceUtils {
     );
     private static final Set<String> warnedUnknownArmourEnchants = new HashSet<>();
     private static final Set<Enchantment> VANILLA_ENCHANTMENTS = initVanillaEnchantments();
+    private static final Material POINTED_DRIPSTONE = Material.matchMaterial("POINTED_DRIPSTONE");
 
     // Stalagmite ignores armour but other blocks under CONTACT do not, explicitly
     // checked below
     static {
-        if (Reflector.versionIsNewerOrEqualTo(1, 11, 0))
-            ARMOUR_IGNORING_CAUSES.add(EntityDamageEvent.DamageCause.CRAMMING);
-        if (Reflector.versionIsNewerOrEqualTo(1, 17, 0))
-            ARMOUR_IGNORING_CAUSES.add(EntityDamageEvent.DamageCause.FREEZE);
+        addDamageCauseIfPresent(ARMOUR_IGNORING_CAUSES, "CRAMMING");
+        addDamageCauseIfPresent(ARMOUR_IGNORING_CAUSES, "FREEZE");
     }
 
     // Method added in 1.15
@@ -91,7 +92,7 @@ public class DefenceUtils {
             EntityDamageEvent.DamageCause damageCause,
             boolean randomness) {
 
-        final double armourPoints = damagedEntity.getAttribute(XAttribute.ARMOR.get()).getValue();
+        final double armourPoints = getArmourPoints(damagedEntity);
         // Make sure we don't go over 100% protection
         final double armourReductionFactor = Math.min(1.0, armourPoints * REDUCTION_PER_ARMOUR_POINT);
 
@@ -106,9 +107,9 @@ public class DefenceUtils {
             // If the damage cause does not ignore armour
             // If the block they are in is a stalagmite, also ignore armour
             if (!ARMOUR_IGNORING_CAUSES.contains(damageCause) &&
-                    !(Reflector.versionIsNewerOrEqualTo(1, 19, 0) &&
+                    !(POINTED_DRIPSTONE != null &&
                             damageCause == EntityDamageEvent.DamageCause.CONTACT &&
-                            damagedEntity.getLocation().getBlock().getType() == Material.POINTED_DRIPSTONE)) {
+                            damagedEntity.getLocation().getBlock().getType() == POINTED_DRIPSTONE)) {
                 armourReduction = currentDamage * -armourReductionFactor;
             }
             damageModifiers.put(EntityDamageEvent.DamageModifier.ARMOR, armourReduction);
@@ -164,16 +165,7 @@ public class DefenceUtils {
      */
     public static double getDamageAfterArmour1_8(LivingEntity defender, double baseDamage, ItemStack[] armourContents,
             EntityDamageEvent.DamageCause damageCause, boolean randomness) {
-        double armourPoints = 0;
-        for (int i = 0; i < armourContents.length; i++) {
-            final ItemStack itemStack = armourContents[i];
-            if (itemStack == null)
-                continue;
-            final EquipmentSlot slot = new EquipmentSlot[] { EquipmentSlot.FEET, EquipmentSlot.LEGS,
-                    EquipmentSlot.CHEST, EquipmentSlot.HEAD }[i];
-            armourPoints += getAttributeModifierSum(itemStack.getType().getDefaultAttributeModifiers(slot)
-                    .get(XAttribute.ARMOR.get()));
-        }
+        double armourPoints = getArmourPoints(armourContents);
 
         final double reductionFactor = armourPoints * REDUCTION_PER_ARMOUR_POINT;
 
@@ -202,6 +194,92 @@ public class DefenceUtils {
                 baseDamage, finalDamage);
 
         return finalDamage;
+    }
+
+    private static double getArmourPoints(LivingEntity damagedEntity) {
+        final double attributeArmourPoints = damagedEntity.getAttribute(XAttribute.ARMOR.get()).getValue();
+        if (attributeArmourPoints > 0) {
+            return attributeArmourPoints;
+        }
+
+        final EntityEquipment equipment = damagedEntity.getEquipment();
+        if (equipment == null) {
+            return attributeArmourPoints;
+        }
+
+        return getArmourPoints(equipment.getArmorContents());
+    }
+
+    private static double getArmourPoints(ItemStack[] armourContents) {
+        double armourPoints = 0;
+        for (int i = 0; i < armourContents.length; i++) {
+            final ItemStack itemStack = armourContents[i];
+            if (itemStack == null)
+                continue;
+            final EquipmentSlot slot = new EquipmentSlot[] { EquipmentSlot.FEET, EquipmentSlot.LEGS,
+                    EquipmentSlot.CHEST, EquipmentSlot.HEAD }[i];
+            armourPoints += getArmourPoints(itemStack.getType(), slot);
+        }
+        return armourPoints;
+    }
+
+    private static double getArmourPoints(Material material, EquipmentSlot slot) {
+        try {
+            final Attribute armourAttribute = XAttribute.ARMOR.get();
+            if (armourAttribute != null) {
+                return getAttributeModifierSum(material.getDefaultAttributeModifiers(slot).get(armourAttribute));
+            }
+        } catch (NoSuchMethodError ignored) {
+            // Material#getDefaultAttributeModifiers is absent on legacy Bukkit APIs.
+        }
+        return getLegacyArmourPoints(material);
+    }
+
+    private static double getLegacyArmourPoints(Material material) {
+        if (material == null) return 0;
+        switch (material.name()) {
+            case "LEATHER_HELMET":
+                return 1;
+            case "GOLD_HELMET":
+            case "GOLDEN_HELMET":
+            case "CHAINMAIL_HELMET":
+            case "IRON_HELMET":
+                return 2;
+            case "DIAMOND_HELMET":
+                return 3;
+            case "LEATHER_CHESTPLATE":
+                return 3;
+            case "GOLD_CHESTPLATE":
+            case "GOLDEN_CHESTPLATE":
+            case "CHAINMAIL_CHESTPLATE":
+                return 5;
+            case "IRON_CHESTPLATE":
+                return 6;
+            case "DIAMOND_CHESTPLATE":
+                return 8;
+            case "LEATHER_LEGGINGS":
+                return 2;
+            case "GOLD_LEGGINGS":
+            case "GOLDEN_LEGGINGS":
+                return 3;
+            case "CHAINMAIL_LEGGINGS":
+                return 4;
+            case "IRON_LEGGINGS":
+                return 5;
+            case "DIAMOND_LEGGINGS":
+                return 6;
+            case "LEATHER_BOOTS":
+            case "GOLD_BOOTS":
+            case "GOLDEN_BOOTS":
+            case "CHAINMAIL_BOOTS":
+                return 1;
+            case "IRON_BOOTS":
+                return 2;
+            case "DIAMOND_BOOTS":
+                return 3;
+            default:
+                return 0;
+        }
     }
 
     /**
@@ -316,6 +394,21 @@ public class DefenceUtils {
         return false;
     }
 
+    private static void addDamageCauseIfPresent(Set<EntityDamageEvent.DamageCause> damageCauses, String name) {
+        final EntityDamageEvent.DamageCause cause = getDamageCause(name);
+        if (cause != null) {
+            damageCauses.add(cause);
+        }
+    }
+
+    private static EntityDamageEvent.DamageCause getDamageCause(String name) {
+        try {
+            return EntityDamageEvent.DamageCause.valueOf(name);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
     private enum EnchantmentType {
         // Data from https://minecraft.fandom.com/wiki/Armor#Mechanics
         PROTECTION(() -> {
@@ -335,10 +428,8 @@ public class DefenceUtils {
                     EntityDamageEvent.DamageCause.FALLING_BLOCK,
                     EntityDamageEvent.DamageCause.THORNS,
                     EntityDamageEvent.DamageCause.DRAGON_BREATH);
-            if (Reflector.versionIsNewerOrEqualTo(1, 10, 0))
-                damageCauses.add(EntityDamageEvent.DamageCause.HOT_FLOOR);
-            if (Reflector.versionIsNewerOrEqualTo(1, 12, 0))
-                damageCauses.add(EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK);
+            addDamageCauseIfPresent(damageCauses, "HOT_FLOOR");
+            addDamageCauseIfPresent(damageCauses, "ENTITY_SWEEP_ATTACK");
 
             return damageCauses;
         },
@@ -349,9 +440,7 @@ public class DefenceUtils {
                     EntityDamageEvent.DamageCause.FIRE_TICK,
                     EntityDamageEvent.DamageCause.LAVA);
 
-            if (Reflector.versionIsNewerOrEqualTo(1, 10, 0)) {
-                damageCauses.add(EntityDamageEvent.DamageCause.HOT_FLOOR);
-            }
+            addDamageCauseIfPresent(damageCauses, "HOT_FLOOR");
 
             return damageCauses;
         }, 1.25, XEnchantment.FIRE_PROTECTION.getEnchant()),

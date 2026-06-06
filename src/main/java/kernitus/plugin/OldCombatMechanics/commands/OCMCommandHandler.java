@@ -7,6 +7,7 @@ package kernitus.plugin.OldCombatMechanics.commands;
 
 import kernitus.plugin.OldCombatMechanics.ModuleLoader;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.api.PlayerModesetChangeEvent;
 import kernitus.plugin.OldCombatMechanics.utilities.Config;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerData;
@@ -17,7 +18,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.PluginDescriptionFile;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Locale;
@@ -38,11 +38,9 @@ public class OCMCommandHandler implements CommandExecutor {
     }
 
     private void help(OCMMain plugin, CommandSender sender) {
-        final PluginDescriptionFile description = plugin.getDescription();
-
         Messenger.sendNoPrefix(sender, ChatColor.DARK_GRAY + Messenger.HORIZONTAL_BAR);
         Messenger.sendNoPrefix(sender, "&6&lOldCombatMechanics&e by &ckernitus&e and &cRayzr522&e version &6%s",
-                description.getVersion());
+                plugin.getDisplayVersion());
 
         if (checkPermissions(sender, Subcommand.reload))
             Messenger.sendNoPrefix(sender, "&eYou can use &c/ocm reload&e to reload the config file");
@@ -120,10 +118,10 @@ public class OCMCommandHandler implements CommandExecutor {
         }
 
         final UUID worldId = player.getWorld().getUID();
-        final Set<String> worldModesets = Config.getWorlds().get(worldId);
+        final Set<String> worldModesets = Config.getAllowedModesets(worldId);
 
-        // If modesets null or empty it means not configured, so all are allowed
-        if (worldModesets != null && !worldModesets.isEmpty() && !worldModesets.contains(modesetName)) {
+        // Empty named world lists are resolved as unrestricted, so all are allowed
+        if (!worldModesets.contains(modesetName)) {
             // Modeset not allowed in current world
             Messenger.send(sender,
                     Config.getConfig().getString("mode-messages.invalid-modeset",
@@ -132,6 +130,11 @@ public class OCMCommandHandler implements CommandExecutor {
         }
 
         final PlayerData playerData = PlayerStorage.getPlayerData(player.getUniqueId());
+        final String previousModeset = playerData.getModesetForWorld(worldId);
+        if (modesetName.equals(previousModeset)) {
+            return;
+        }
+
         playerData.setModesetForWorld(worldId, modesetName);
         PlayerStorage.setPlayerData(player.getUniqueId(), playerData);
         PlayerStorage.scheduleSave();
@@ -141,9 +144,16 @@ public class OCMCommandHandler implements CommandExecutor {
                         "&4ERROR: &rmode-messages.mode-set string missing"),
                 modesetName);
 
+        Bukkit.getPluginManager().callEvent(new PlayerModesetChangeEvent(
+                player,
+                player.getWorld(),
+                previousModeset,
+                modesetName,
+                PlayerModesetChangeEvent.Reason.COMMAND
+        ));
+
         // Re-apply things like attack speed and collision team
-        final Player playerCopy = player;
-        ModuleLoader.getModules().forEach(module -> module.onModesetChange(playerCopy));
+        ModuleLoader.notifyPlayerStateChanged(player);
     }
 
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String label,

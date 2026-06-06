@@ -21,7 +21,7 @@ idea {
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
-version = "v2.4.0-adapted" // x-release-please-version
+version = "v2.5.0-adapted" // x-release-please-version
 description = "OldCombatMechanics"
 
 allprojects {
@@ -36,15 +36,22 @@ allprojects {
 }
 
 dependencies {
-    implementation("org.bstats:bstats-bukkit:3.1.0")
-    // Shaded in by Bukkit
-    compileOnly("io.netty:netty-all:4.1.130.Final")
+    implementation("org.bstats:bstats-bukkit:3.2.1")
+    // Server-provided: intentionally pinned to the oldest supported runtime baseline
+    // (Minecraft 1.9.4 / Netty 4.0.23.Final) so compile-only code cannot use newer Netty APIs unavailable on legacy servers.
+    compileOnly("io.netty:netty-all:4.0.23.Final")
     // Placeholder API
-    compileOnly("me.clip:placeholderapi:2.11.6")
+    compileOnly("me.clip:placeholderapi:2.12.2")
     // For BSON file serialisation
     implementation("org.mongodb:bson:5.6.2")
 //    // Spigot
 //    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
+    implementation("org.mongodb:bson:5.8.0")
+    // Spigot
+    compileOnly("org.spigotmc:spigot-api:26.1.2-R0.1-SNAPSHOT")
+    testImplementation("io.kotest:kotest-runner-junit5-jvm:5.9.1")
+    testImplementation("io.kotest:kotest-assertions-core-jvm:5.9.1")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     // JSR-305 annotations (javax.annotation.Nullable)
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
     // ProtocolLib
@@ -52,7 +59,7 @@ dependencies {
     // PacketEvents
     implementation("com.github.retrooper:packetevents-spigot:2.12.1")
     // XSeries
-    implementation("com.github.cryptomorin:XSeries:13.6.0")
+    implementation("com.github.cryptomorin:XSeries:13.7.0")
 
     //For ingametesting
     // Mojang mappings for NMS

@@ -7,15 +7,19 @@
 package kernitus.plugin.OldCombatMechanics.utilities.storage;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.ModuleLoader;
+import kernitus.plugin.OldCombatMechanics.api.PlayerModesetChangeEvent;
 import kernitus.plugin.OldCombatMechanics.module.OCMModule;
 import kernitus.plugin.OldCombatMechanics.utilities.Config;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.event.world.WorldUnloadEvent;
 
@@ -38,22 +42,26 @@ public class ModesetListener extends OCMModule {
         final UUID playerId = player.getUniqueId();
         final PlayerData playerData = PlayerStorage.getPlayerData(playerId);
         final String modesetFromName = playerData.getModesetForWorld(event.getFrom().getUID());
-        updateModeset(player, player.getWorld().getUID(), modesetFromName);
+        updateModeset(player, player.getWorld(), modesetFromName, PlayerModesetChangeEvent.Reason.WORLD_CHANGE);
     }
 
-    private static void updateModeset(Player player, UUID worldId, String modesetFromName) {
+    private static void updateModeset(
+            Player player,
+            World world,
+            String modesetFromName,
+            PlayerModesetChangeEvent.Reason reason
+    ) {
+        final UUID worldId = world.getUID();
         final UUID playerId = player.getUniqueId();
         final PlayerData playerData = PlayerStorage.getPlayerData(playerId);
         final String originalModeset = playerData.getModesetForWorld(worldId);
         String modesetName = playerData.getModesetForWorld(worldId);
 
         // Get modesets allowed in to world
-        Set<String> allowedModesets = Config.getWorlds().get(worldId);
-        if (allowedModesets == null || allowedModesets.isEmpty())
-            allowedModesets = Config.getModesets().keySet();
+        Set<String> allowedModesets = Config.getAllowedModesets(worldId);
 
-        // If they don't have a modeset in toWorld yet
-        if (modesetName == null) {
+        // If they don't have a modeset in toWorld yet, or the stored one is not allowed there
+        if (modesetName == null || !allowedModesets.contains(modesetName)) {
             // Try to use modeset of world they are coming from
             if (modesetFromName != null && allowedModesets.contains(modesetFromName))
                 modesetName = modesetFromName;
@@ -72,13 +80,30 @@ public class ModesetListener extends OCMModule {
                             "&4ERROR: &rmode-messages.mode-set string missing"),
                     modesetName
             );
+
+            Bukkit.getPluginManager().callEvent(new PlayerModesetChangeEvent(
+                    player,
+                    world,
+                    originalModeset,
+                    modesetName,
+                    reason
+            ));
+
+            // Re-apply things like attack speed and collision team
+            ModuleLoader.notifyPlayerStateChanged(player);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerJoin(PlayerJoinEvent event) {
         final Player player = event.getPlayer();
-        updateModeset(player, player.getWorld().getUID(), null);
+        updateModeset(player, player.getWorld(), null, PlayerModesetChangeEvent.Reason.JOIN);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        final Player player = event.getPlayer();
+        PlayerModuleOverrides.clearAll(player);
     }
 
     @EventHandler(ignoreCancelled = false)

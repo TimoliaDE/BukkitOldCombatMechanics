@@ -5,7 +5,6 @@
  */
 package kernitus.plugin.OldCombatMechanics.utilities.reflection;
 
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.type.ClassType;
 import org.bukkit.Bukkit;
 
 import java.lang.reflect.*;
@@ -52,12 +51,14 @@ public class Reflector {
      * @return true if the server version is newer or equal to the one provided
      */
     public static boolean versionIsNewerOrEqualTo(int major, int minor, int patch) {
-        int majorVersion = getMajorVersion();
-        int minorVersion = getMinorVersion();
-
-        if (majorVersion != major) return majorVersion >= major;
-        if (minorVersion != minor) return minorVersion >= minor;
-        return getPatchVersion() >= patch;
+        return VersionComparator.isNewerOrEqualTo(
+                getMajorVersion(),
+                getMinorVersion(),
+                getPatchVersion(),
+                major,
+                minor,
+                patch
+        );
     }
 
     private static int getMajorVersion() {
@@ -70,10 +71,6 @@ public class Reflector {
 
     private static int getPatchVersion() {
         return patchVersion;
-    }
-
-    public static Class<?> getClass(ClassType type, String name) {
-        return getClass(type.qualifyClassName(name));
     }
 
     public static Class<?> getClass(String fqn) {

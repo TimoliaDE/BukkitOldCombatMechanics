@@ -13,7 +13,9 @@ import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.module.ModulePlayerKnockback
 import com.cryptomorin.xseries.XAttribute
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector
+import kernitus.plugin.OldCombatMechanics.utilities.CompatibilityCapabilities
+import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.getPlayerData
+import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.setPlayerData
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -75,9 +77,9 @@ class PlayerKnockbackIntegrationTest : FunSpec({
     }
 
     fun setModeset(player: Player, modeset: String) {
-        val playerData = kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.getPlayerData(player.uniqueId)
+        val playerData = getPlayerData(player.uniqueId)
         playerData.setModesetForWorld(player.world.uid, modeset)
-        kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.setPlayerData(player.uniqueId, playerData)
+        setPlayerData(player.uniqueId, playerData)
     }
 
     fun pendingKnockbackField(): java.lang.reflect.Field {
@@ -124,14 +126,26 @@ class PlayerKnockbackIntegrationTest : FunSpec({
         val pendingClass = ModulePlayerKnockback::class.java.declaredClasses
             .firstOrNull { it.simpleName == "PendingKnockback" }
             ?: error("PendingKnockback inner class not found")
-        val ctor = pendingClass.getDeclaredConstructor(Vector::class.java, Long::class.javaPrimitiveType)
+        val ctor = pendingClass.declaredConstructors.firstOrNull { constructor ->
+            val parameterTypes = constructor.parameterTypes.toList()
+            parameterTypes == listOf(Vector::class.java, UUID::class.java, Long::class.javaPrimitiveType) ||
+                parameterTypes == listOf(Vector::class.java, Long::class.javaPrimitiveType)
+        } ?: error("No supported PendingKnockback constructor found")
         ctor.isAccessible = true
-        val pending = ctor.newInstance(vector, Long.MAX_VALUE)
+        val pending = when (ctor.parameterTypes.size) {
+            3 -> ctor.newInstance(vector, attacker.uniqueId, Long.MAX_VALUE)
+            else -> ctor.newInstance(vector, Long.MAX_VALUE)
+        }
         pendingKnockbackMap()[uuid] = pending
     }
 
     fun damageEvent(): EntityDamageByEntityEvent {
-        val event = EntityDamageByEntityEvent(attacker, victim, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 4.0)
+        val event = EntityDamageByEntityEvent(
+            attacker,
+            victim,
+            EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+            4.0
+        )
         Bukkit.getPluginManager().callEvent(event)
         return event
     }
@@ -276,7 +290,12 @@ class PlayerKnockbackIntegrationTest : FunSpec({
                 val modifier = AttributeModifier(UUID.randomUUID(), "test", 0.5, AttributeModifier.Operation.ADD_NUMBER)
                 attribute?.addModifier(modifier)
 
-                val event = EntityDamageByEntityEvent(attacker, victim, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 4.0)
+                val event = EntityDamageByEntityEvent(
+                    attacker,
+                    victim,
+                    EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+                    4.0
+                )
                 Bukkit.getPluginManager().callEvent(event)
 
                 attribute?.modifiers?.contains(modifier) shouldBe false
@@ -284,7 +303,7 @@ class PlayerKnockbackIntegrationTest : FunSpec({
         }
 
         test("modifiers remain when resistance enabled and supported") {
-            if (!Reflector.versionIsNewerOrEqualTo(1, 16, 0)) return@test
+            if (!CompatibilityCapabilities.isKnockbackResistanceAvailable()) return@test
             withConfig {
                 ocm.config.set("old-player-knockback.enable-knockback-resistance", true)
                 module.reload()
@@ -294,7 +313,12 @@ class PlayerKnockbackIntegrationTest : FunSpec({
                 val modifier = AttributeModifier(UUID.randomUUID(), "test", 0.5, AttributeModifier.Operation.ADD_NUMBER)
                 attribute?.addModifier(modifier)
 
-                val event = EntityDamageByEntityEvent(attacker, victim, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 4.0)
+                val event = EntityDamageByEntityEvent(
+                    attacker,
+                    victim,
+                    EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+                    4.0
+                )
                 Bukkit.getPluginManager().callEvent(event)
 
                 attribute?.modifiers?.contains(modifier) shouldBe true
@@ -302,7 +326,7 @@ class PlayerKnockbackIntegrationTest : FunSpec({
         }
 
         test("enabled resistance scales horizontal knockback") {
-            if (!Reflector.versionIsNewerOrEqualTo(1, 16, 0)) return@test
+            if (!CompatibilityCapabilities.isKnockbackResistanceAvailable()) return@test
             withConfig {
                 ocm.config.set("old-player-knockback.knockback-horizontal", 0.4)
                 ocm.config.set("old-player-knockback.knockback-vertical", 0.4)

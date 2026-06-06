@@ -34,8 +34,9 @@ disabled_modules:
 modesets:
   # Modesets are lists of modules that are enabled for a player in that mode.
   # You can create, remove, and rename as many modesets as you like by modifying the list below.
-  # When in PvP, the modeset of the attacker is checked first.
-  # If not PvP, the modeset of the defending entity is checked.
+  # Mixed-mode ownership: offensive direct PvP mechanics follow the attacker's mode.
+  # Armour and shields follow the defender's mode.
+  # Environmental damage follows the affected player or world mode.
   # PlaceholderAPI: %ocm_modeset%
   old:
     - "disable-attack-cooldown"
@@ -75,15 +76,16 @@ modesets:
   new: []
 
 worlds:
-  # These are the modesets available in each world.
-  # If player has no modeset when moving worlds they'll be assigned first mode in list,
-  # unless the mode from the world they are coming from is also available in the new world.
-  # Worlds not specified below will have all modesets available.
-  world: [ "old", "new" ]
-  world_nether: [ "old", "new" ]
-  world_the_end: [ "old", "new" ]
-  # old_world: ["old"]
-  # brave_new_world: ["new"]
+  # Controls which modesets are allowed in each world.
+  # __default__ is used for worlds not listed by name.
+  # The first modeset in each list is the default for players in that world.
+  # If you create a new modeset, add it to __default__ or to each world where it should be available.
+  __default__: [ "old", "new" ]
+  # world: [ "old", "new" ]
+  # world_nether: [ "old", "new" ]
+  # world_the_end: [ "old", "new" ]
+  # old_world: [ "old" ]
+  # brave_new_world: [ "new" ]
 
 mode-messages:
   # Messages used when changing player mode

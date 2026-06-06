@@ -3,12 +3,12 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 main: kernitus.plugin.OldCombatMechanics.OCMMain
 name: OldCombatMechanics
-version: 2.4.0-adapted
+version: ${pluginVersion}
 authors: [kernitus, Rayzr522]
 description: Reverts to pre-1.9 combat mechanics
 website: https://github.com/kernitus/BukkitOldCombatMechanics
 load: POSTWORLD
-softdepend: [PlaceholderAPI]
+softdepend: [PlaceholderAPI, MythicMobs]
 api-version: 1.19
 
 commands:

@@ -9,6 +9,8 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.github.retrooper.packetevents.PacketEvents;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
+import kernitus.plugin.OldCombatMechanics.api.OldCombatMechanicsAPI;
+import kernitus.plugin.OldCombatMechanics.api.OldCombatMechanicsAPIImpl;
 import kernitus.plugin.OldCombatMechanics.commands.OCMCommandCompleter;
 import kernitus.plugin.OldCombatMechanics.commands.OCMCommandHandler;
 import kernitus.plugin.OldCombatMechanics.hooks.PlaceholderAPIHook;
@@ -21,6 +23,7 @@ import kernitus.plugin.OldCombatMechanics.utilities.damage.AttackCooldownTracker
 import kernitus.plugin.OldCombatMechanics.utilities.damage.EntityDamageByEntityListener;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.ModesetListener;
+import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerModuleOverrides;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage;
 import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bstats.bukkit.Metrics;
@@ -39,21 +42,28 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.RegisteredListener;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public class OCMMain extends JavaPlugin {
 
+    private static final String BUILD_PROPERTIES_RESOURCE = "/ocm-build.properties";
+
     private static OCMMain INSTANCE;
+    private static String buildCommit;
     private final Logger logger = getLogger();
     private final OCMConfigHandler CH = new OCMConfigHandler(this);
     private final List<Runnable> disableListeners = new ArrayList<>();
@@ -62,6 +72,7 @@ public class OCMMain extends JavaPlugin {
     private boolean isLatestNmsPackage;
     private ProtocolManager protocolManager;
 
+    private OldCombatMechanicsAPI api;
     public OCMMain() {
         super();
     }
@@ -106,6 +117,10 @@ public class OCMMain extends JavaPlugin {
 
         // Register all the modules
         registerModules();
+
+        // Register public API service
+        api = new OldCombatMechanicsAPIImpl(this);
+        Bukkit.getServicesManager().register(OldCombatMechanicsAPI.class, api, this, ServicePriority.Normal);
 
         // Register all hooks for integrating with other plugins
         registerHooks();
@@ -231,6 +246,13 @@ public class OCMMain extends JavaPlugin {
         });
 
         PlayerStorage.instantSave();
+
+        PlayerModuleOverrides.clearAll();
+
+        if (api != null) {
+            Bukkit.getServicesManager().unregister(OldCombatMechanicsAPI.class, api);
+            api = null;
+        }
 
         PacketEvents.getAPI().terminate();
 
@@ -413,4 +435,38 @@ public class OCMMain extends JavaPlugin {
     public ProtocolManager getProtocolManager() {
         return protocolManager;
     }
+    public String getDisplayVersion() {
+        return formatDisplayVersion(getDescription().getVersion());
+    }
+
+    public static String formatDisplayVersion(String version) {
+        final String commit = getBuildCommit();
+        if (commit.isEmpty()) return version;
+
+        return version + " (commit " + commit + ")";
+    }
+
+    private static synchronized String getBuildCommit() {
+        if (buildCommit == null) buildCommit = loadBuildCommit();
+
+        return buildCommit;
+    }
+
+    private static String loadBuildCommit() {
+        final Properties properties = new Properties();
+
+        try (InputStream stream = OCMMain.class.getResourceAsStream(BUILD_PROPERTIES_RESOURCE)) {
+            if (stream == null) return "";
+
+            properties.load(stream);
+        } catch (IOException e) {
+            return "";
+        }
+
+        final String commit = properties.getProperty("commit", "").trim();
+        if (commit.isEmpty() || commit.contains("${")) return "";
+
+        return commit;
+    }
+
 }

@@ -13,8 +13,10 @@ import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.module.ModuleOldToolDamage
+import kernitus.plugin.OldCombatMechanics.utilities.CompatibilityCapabilities
 import kernitus.plugin.OldCombatMechanics.utilities.damage.WeaponDamages
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector
+import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.getPlayerData
+import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.setPlayerData
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
@@ -55,7 +57,9 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
         mace: Double?,
         block: suspend TestScope.() -> Unit
     ) {
-        val snapshot = ocm.config.getConfigurationSection("old-tool-damage.damages")?.getValues(false) ?: emptyMap<String, Any?>()
+        val snapshot = ocm.config
+            .getConfigurationSection("old-tool-damage.damages")
+            ?.getValues(false) ?: emptyMap<String, Any?>()
 
         fun set(path: String, value: Double?) {
             if (value == null) return
@@ -92,9 +96,9 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
             player.isInvulnerable = false
             player.inventory.clear()
             player.activePotionEffects.forEach { player.removePotionEffect(it.type) }
-            val data = kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.getPlayerData(player.uniqueId)
+            val data = getPlayerData(player.uniqueId)
             data.setModesetForWorld(player.world.uid, "old")
-            kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.setPlayerData(player.uniqueId, data)
+            setPlayerData(player.uniqueId, data)
         }
         return SpawnedPlayer(fake, player)
     }
@@ -108,6 +112,7 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
     }
 
     test("trident melee uses configured base damage") {
+        if (!CompatibilityCapabilities.isMaterialAvailable("TRIDENT")) return@test
         val tridentMat = Material.matchMaterial("TRIDENT") ?: return@test
         withWeaponConfig(tridentMelee = 12.0, tridentThrown = null, mace = null) {
             val world = checkNotNull(Bukkit.getWorld("world"))
@@ -127,7 +132,12 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
                 Bukkit.getPluginManager().registerEvents(listener, testPlugin)
                 attacker.player.inventory.setItemInMainHand(ItemStack(tridentMat))
                 Bukkit.getPluginManager().callEvent(
-                    EntityDamageByEntityEvent(attacker.player, victim.player, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 8.0)
+                    EntityDamageByEntityEvent(
+                        attacker.player,
+                        victim.player,
+                        EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+                        8.0
+                    )
                 )
                 HandlerList.unregisterAll(listener)
             }
@@ -139,8 +149,9 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
     }
 
     test("thrown trident uses configured damage") {
+        if (!CompatibilityCapabilities.isMaterialAvailable("TRIDENT") ||
+            !CompatibilityCapabilities.isBukkitClassAvailable("org.bukkit.entity.Trident")) return@test
         val tridentMat = Material.matchMaterial("TRIDENT") ?: return@test
-        if (!Reflector.versionIsNewerOrEqualTo(1, 13, 0)) return@test
         withWeaponConfig(tridentMelee = null, tridentThrown = 15.0, mace = null) {
             val world = checkNotNull(Bukkit.getWorld("world"))
             val victim = spawnFake(Location(world, 0.0, 100.0, 0.0))
@@ -164,7 +175,12 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
             runSync {
                 Bukkit.getPluginManager().registerEvents(listener, testPlugin)
                 Bukkit.getPluginManager().callEvent(
-                    EntityDamageByEntityEvent(tridentRef.get(), victim.player, EntityDamageEvent.DamageCause.PROJECTILE, 8.0)
+                    EntityDamageByEntityEvent(
+                        tridentRef.get(),
+                        victim.player,
+                        EntityDamageEvent.DamageCause.PROJECTILE,
+                        8.0
+                    )
                 )
                 HandlerList.unregisterAll(listener)
             }
@@ -177,6 +193,7 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
     }
 
     test("mace melee uses configured base damage") {
+        if (!CompatibilityCapabilities.isMaterialAvailable("MACE")) return@test
         val maceMat = Material.matchMaterial("MACE") ?: return@test
         withWeaponConfig(tridentMelee = null, tridentThrown = null, mace = 10.0) {
             val world = checkNotNull(Bukkit.getWorld("world"))
@@ -196,7 +213,12 @@ class CustomWeaponDamageIntegrationTest : FunSpec({
                 Bukkit.getPluginManager().registerEvents(listener, testPlugin)
                 attacker.player.inventory.setItemInMainHand(ItemStack(maceMat))
                 Bukkit.getPluginManager().callEvent(
-                    EntityDamageByEntityEvent(attacker.player, victim.player, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 6.0)
+                    EntityDamageByEntityEvent(
+                        attacker.player,
+                        victim.player,
+                        EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+                        6.0
+                    )
                 )
                 HandlerList.unregisterAll(listener)
             }

@@ -72,7 +72,8 @@ class FakePlayer(private val plugin: JavaPlugin) {
         }
         if (isLegacy12) {
             legacyImpl12!!.spawn(location)
-            serverPlayer = legacyImpl12.entityPlayer ?: throw IllegalStateException("Legacy12 entity player not created.")
+            serverPlayer = legacyImpl12.entityPlayer
+                ?: throw IllegalStateException("Legacy12 entity player not created.")
             bukkitPlayer = legacyImpl12.bukkitPlayer
             return
         }
@@ -138,6 +139,26 @@ class FakePlayer(private val plugin: JavaPlugin) {
 
         plugin.logger.info("Spawn: completed successfully")
     }
+
+    fun teleport(location: Location): Boolean {
+        if (isLegacy9) {
+            val teleported = legacyImpl9!!.teleport(location)
+            if (teleported) {
+                serverPlayer = legacyImpl9.entityPlayer ?: serverPlayer
+                bukkitPlayer = legacyImpl9.bukkitPlayer ?: Bukkit.getPlayer(uuid)
+            }
+            return teleported
+        }
+
+        val teleported = bukkitPlayer?.teleport(location) ?: false
+        if (teleported) {
+            bukkitPlayer = Bukkit.getPlayer(uuid) ?: bukkitPlayer
+        }
+        return teleported
+    }
+
+    fun requireBukkitPlayer(): Player = Bukkit.getPlayer(uuid) ?: bukkitPlayer
+        ?: error("Bukkit player with UUID $uuid not found!")
 
     private fun setupPlayerConnection(minecraftServer: Any, worldServer: Any) {
         // Access ServerGamePacketListenerImpl class
@@ -250,7 +271,9 @@ class FakePlayer(private val plugin: JavaPlugin) {
             return ctor.newInstance(*args.toTypedArray())
         }
 
-        throw NoSuchMethodException("No compatible ServerGamePacketListenerImpl constructor found for ${listenerClass.name}")
+        throw NoSuchMethodException(
+            "No compatible ServerGamePacketListenerImpl constructor found for ${listenerClass.name}"
+        )
     }
 
     private fun createCommonListenerCookie(cookieClass: Class<*>, serverPlayer: Any): Any {
@@ -620,16 +643,6 @@ class FakePlayer(private val plugin: JavaPlugin) {
         // Disconnect the player
         bukkitPlayer!!.kickPlayer(quitMessage)
 
-        // Remove the player from the world
-        /*
-    val removeMethodName = reflectionRemapper.remapMethodName(
-        serverPlayer.javaClass,
-        "remove"
-    )
-    val removeMethod = serverPlayer.javaClass.getMethod(removeMethodName)
-    removeMethod.invoke(serverPlayer)
-         */
-
         // Remove from playerList if still present and not already removed
         runCatching {
             val playerList = getPlayerList(getMinecraftServer())
@@ -702,7 +715,8 @@ class FakePlayer(private val plugin: JavaPlugin) {
         val candidateNames = listOf("doTick", "tick")
         for (name in candidateNames) {
             val remapped = reflectionRemapper.remapMethodName(serverPlayerClass, name)
-            val method = Reflector.getMethod(serverPlayerClass, remapped) ?: Reflector.getMethod(serverPlayerClass, name)
+            val method = Reflector.getMethod(serverPlayerClass, remapped)
+                ?: Reflector.getMethod(serverPlayerClass, name)
             if (method != null && method.parameterCount == 0) {
                 method.isAccessible = true
                 return method
