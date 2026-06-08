@@ -381,7 +381,17 @@ fix-bow-shoot:
   # This fixes a bug where the arrow sometimes does not appear to fly client-side
   # even though it works server-side when using a bow. This does not apply to crossbows.
   # However, the arrow may be launched slightly delayed.
-  # Only supported in version 1.21.3 and later.
+  # If enabled, the shooting location will be adapted to match 1.8 behavior when using default offset values.
+  # Requires server version 1.21.3 or later.
+  xOffset: -0.16
+  # The y offset applied when shooting an arrow with a bow.
+  yOffset: -0.1
+  # The y offset applied when sneaking.
+  yOffsetSneak: 0.17
+  # When enabled, the sneak offset is applied for all client versions if the player is sneaking.
+  # If disabled, this only applies to 1.8 clients.
+  sneakOffsetModern: true
+
 
 old-fall-damage:
   # This matches the fall damage to 1.8 version.
@@ -394,7 +404,7 @@ old-bucket-placement:
   # next to a waterlogged block instead of directly on it.
   # Also fixes water placement for 1.8 clients when using newer server versions.
   # If enabled, this does not affect modern clients (versions newer than 1.9).
-  onlyForLegacy: true
+  onlyForLegacy: false
 
 damage-inside-wall:
   # This causes the player to take 1 damage every 10 ticks
