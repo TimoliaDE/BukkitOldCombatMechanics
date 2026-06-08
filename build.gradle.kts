@@ -42,7 +42,7 @@ dependencies {
     // Placeholder API
     compileOnly("me.clip:placeholderapi:2.12.2")
     // For BSON file serialisation
-    implementation("org.mongodb:bson:5.6.2")
+    implementation("org.mongodb:bson:5.8.0")
 //    // Spigot
 //    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
     // JSR-305 annotations (javax.annotation.Nullable)

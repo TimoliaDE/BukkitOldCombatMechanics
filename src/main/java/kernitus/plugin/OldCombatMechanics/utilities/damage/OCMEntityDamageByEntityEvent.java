@@ -143,6 +143,7 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
         debug(livingDamager, "No ench damage: " + tempDamage);
 
         // Check if it's a critical hit
+        wasSprinting = livingDamager instanceof Player player && player.isSprinting();
         if (livingDamager instanceof Player && DamageUtils.isCriticalHit1_8((HumanEntity) livingDamager)){
             was1_8Crit = true;
             debug(livingDamager, "1.8 Critical hit detected");

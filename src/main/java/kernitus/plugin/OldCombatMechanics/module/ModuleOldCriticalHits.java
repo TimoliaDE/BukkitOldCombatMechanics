@@ -5,10 +5,16 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.manager.player.PlayerManager;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityAnimation;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.damage.OCMEntityDamageByEntityEvent;
 import kernitus.plugin.OldCombatMechanics.utilities.damage.DamageUtils;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.HumanEntity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 
 public class ModuleOldCriticalHits extends OCMModule {
@@ -36,8 +42,24 @@ public class ModuleOldCriticalHits extends OCMModule {
             isCritical = DamageUtils.isCriticalHit1_8((HumanEntity) e.getDamager());
         }
 
+        boolean wasSprinting = e.wasSprinting();
         // In 1.9, a critical hit requires the player not to be sprinting
-        if (isCritical && (allowSprinting || !e.wasSprinting()))
+        if (isCritical && (allowSprinting || !wasSprinting)) {
+            Entity damagee = e.getDamagee();
+            // This ensures that sprint crits show particles for all clients
+            if (wasSprinting && damagee instanceof LivingEntity) {
+                WrapperPlayServerEntityAnimation packet = new WrapperPlayServerEntityAnimation(
+                        damagee.getEntityId(),
+                        WrapperPlayServerEntityAnimation.EntityAnimationType.CRITICAL_HIT
+                );
+
+                PlayerManager manager = PacketEvents.getAPI().getPlayerManager();
+                for (Player viewer : damagee.getWorld().getPlayers()) {
+                    manager.sendPacket(viewer, packet);
+                }
+            }
+
             e.setCriticalMultiplier(multiplier);
+        }
     }
 }
