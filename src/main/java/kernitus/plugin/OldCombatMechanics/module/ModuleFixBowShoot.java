@@ -36,7 +36,7 @@ public class ModuleFixBowShoot extends OCMModule {
 
     @Override
     public void reload() {
-        xOffset = module().getDouble("zOffset", 0.16);
+        xOffset = module().getDouble("xOffset", 0.16);
         yOffset = module().getDouble("yOffset", -0.1);
         yOffsetSneak = module().getDouble("yOffsetSneak", 0.17);
         sneakOffsetModern = module().getBoolean("sneakOffsetModern", false);
