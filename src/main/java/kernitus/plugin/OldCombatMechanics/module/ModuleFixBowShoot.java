@@ -78,7 +78,7 @@ public class ModuleFixBowShoot extends OCMModule {
                 .normalize();
 
         double finalYOffset = player.isSneaking() &&
-                (ViaVersionUtil.isLegacyClientsAllowed() || sneakOffsetModern)
+                (ViaVersionUtil.isLegacyClient(player) || sneakOffsetModern)
                 ? yOffsetSneak
                 : yOffset;
 
