@@ -383,15 +383,14 @@ fix-bow-shoot:
   # However, the arrow may be launched slightly delayed.
   # If enabled, the shooting location will be adapted to match 1.8 behavior when using default offset values.
   # Requires server version 1.21.3 or later.
-  xOffset: -0.16
+  xOffset: 0.16
   # The y offset applied when shooting an arrow with a bow.
   yOffset: -0.1
   # The y offset applied when sneaking.
   yOffsetSneak: 0.17
   # When enabled, the sneak offset is applied for all client versions if the player is sneaking.
   # If disabled, this only applies to 1.8 clients.
-  sneakOffsetModern: true
-
+  sneakOffsetModern: false
 
 old-fall-damage:
   # This matches the fall damage to 1.8 version.
