@@ -11,6 +11,8 @@ The following options have been added to the config
 (details for each can be found in the config file):
 
 - `old-projectile-trajectory`
+- `projectile-shoot-offset`
+- `relative-projectile-velocity`
 - `no-deflect-fire-projectile`
 - `old-bow-damage`
 - `fix-sounds`

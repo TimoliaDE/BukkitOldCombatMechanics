@@ -303,6 +303,8 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleFishingKnockback(this));
         ModuleLoader.addModule(new ModulePlayerKnockback(this));
         ModuleLoader.addModule(new ModuleOldProjectileTrajectory(this));
+        ModuleLoader.addModule(new ModuleProjectileShootOffset(this));
+        ModuleLoader.addModule(new ModuleRelativeProjectileVelocity(this));
         ModuleLoader.addModule(new ModuleOldBowDamage(this));
         ModuleLoader.addModule(new ModuleFixBowShoot(this));
         ModuleLoader.addModule(new ModuleOldFallDamage(this));

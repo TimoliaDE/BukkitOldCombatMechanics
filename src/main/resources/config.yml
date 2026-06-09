@@ -52,6 +52,8 @@ modesets:
     - "disable-new-attack-particles"
     - "old-player-knockback"
     - "old-projectile-trajectory"
+    - "projectile-shoot-offset"
+    - "relative-projectile-velocity"
     - "old-bow-damage"
     - "fix-sounds"
     - "fix-block-break"
@@ -346,6 +348,27 @@ old-player-knockback:
   no-deflect-arrow: true
 
 old-projectile-trajectory:
+  # It changes the spread when shooting a projectile to match 1.8 behavior,
+  # making projectiles shoot slightly more accurately than in newer versions.
+  # This is the spread intensity
+  spreadIntensity: 0.0075
+
+projectile-shoot-offset:
+  # This makes the projectile spawn closer to the hand that launches it
+  # instead of the player's eye position, just like in 1.8.
+  # Furthermore, the vertical offset when spawning a projectile is
+  # modified to match 1.8 clients while sneaking, because it is
+  # reduced much less in 1.8.
+  # The horizontal/vertical offset applied when a player shoots a projectile
+  xOffset: 0.16
+  yOffset: -0.1
+  # The vertical offset applied instead when sneaking additionally.
+  yOffsetSneak: 0.17
+  # When enabled, the sneak offset is applied for all client versions if the player is sneaking.
+  # If disabled, this only applies to 1.8 clients.
+  sneakOffsetModern: false
+
+relative-projectile-velocity:
   # This disables the relative projectile velocity. In other words,
   # projectiles such as arrows or thrown potions will no longer be
   # affected by the player's movement, e.g. when jumping.
@@ -381,16 +404,7 @@ fix-bow-shoot:
   # This fixes a bug where the arrow sometimes does not appear to fly client-side
   # even though it works server-side when using a bow. This does not apply to crossbows.
   # However, the arrow may be launched slightly delayed.
-  # If enabled, the shooting location will be adapted to match 1.8 behavior when using default offset values.
   # Requires server version 1.21.3 or later.
-  xOffset: 0.16
-  # The y offset applied when shooting an arrow with a bow.
-  yOffset: -0.1
-  # The y offset applied when sneaking.
-  yOffsetSneak: 0.17
-  # When enabled, the sneak offset is applied for all client versions if the player is sneaking.
-  # If disabled, this only applies to 1.8 clients.
-  sneakOffsetModern: false
 
 old-fall-damage:
   # This matches the fall damage to 1.8 version.
