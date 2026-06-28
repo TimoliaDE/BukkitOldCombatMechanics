@@ -8,7 +8,7 @@ plugins {
     `java-library`
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
     id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
-    id("com.gradleup.shadow") version "9.4.1"
+    id("com.gradleup.shadow") version "9.4.2"
     idea
 }
 
@@ -21,7 +21,7 @@ idea {
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
-version = "v2.5.0-adapted" // x-release-please-version
+version = "v2.5.0-2026_06_28" // x-release-please-version
 description = "OldCombatMechanics"
 
 allprojects {
@@ -61,7 +61,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.3")
-    compileOnly("com.viaversion:viaversion-api:5.9.1")
+    compileOnly("com.viaversion:viaversion-api:5.10.0")
 }
 
 java {
@@ -101,24 +101,4 @@ tasks {
             expand(props)
         }
     }
-//    jar {
-//        // optionales Ziel, falls du nicht build/libs nutzen willst
-//        destinationDirectory.set(layout.buildDirectory.dir("libs"))
-//
-//        // Copy-Task nach dem Jar automatisch ausführen
-//        finalizedBy("copyToServer")
-//    }
-//
-//    register<Copy>("copyToServer") {
-//        from(layout.buildDirectory.dir("libs"))
-//
-//        // alle Fat-/Shadow-JARs
-//        include("*-all.jar")
-//
-//        // Zielordner
-//        into("C:/Users/minhn/OneDrive/Desktop/Development/plugins")
-//
-//        // feste Umbenennung beim Kopieren
-//        rename { _ -> "OldCombatMechanics-v2.3.0-adapted-all.jar" }
-//    }
 }

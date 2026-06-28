@@ -1,6 +1,6 @@
 name: OldCombatMechanics
 main: kernitus.plugin.OldCombatMechanics.OCMMain
-version: 2.5.0-adapted
+version: 2.5.0-2026_06_28
 api-version: 1.19
 
 dependencies:

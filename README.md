@@ -34,7 +34,7 @@ In addition, the default values for the following config options have been adjus
 This plugin requires **Java 21 or higher** and supports the **Minecraft Java Edition** versions **1.20.2–1.21.11**.
 
 ### ⚠️ Important Note
-Use **only** the JAR file ending with `reobf.jar`:  
-**`OldCombatMechanics-v2.5.0-adapted-reobf.jar`**
+Use **only** the JAR file ending with `-all.jar`:  
+**`OldCombatMechanics-v2.5.0-<date>-all.jar`**
 
 Other JAR files in the `build/libs` folder do **not** work properly.

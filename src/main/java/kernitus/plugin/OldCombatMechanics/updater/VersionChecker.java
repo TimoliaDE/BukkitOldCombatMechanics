@@ -29,9 +29,14 @@ public class VersionChecker {
     }
 
     private static int[] getVersionNumbers(String ver) {
-        // Support both -beta and -SNAPSHOT
+        // Supports the suffixes -beta, -adapted, -SNAPSHOT, and an optional date suffix (yyyy_MM_dd).
+        if (ver.contains("-")) {
+            ver = ver.split("-")[0];
+        }
+
         Matcher m = Pattern
-                .compile("(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-(beta|adapted|SNAPSHOT)(\\d*))?",
+                .compile("(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-(beta|adapted|SNAPSHOT)(\\\\d*))?" +
+                                "(?:-\\\\d{4}_\\\\d{2}_\\\\d{2})?",
                         Pattern.CASE_INSENSITIVE)
                 .matcher(ver);
         if (!m.matches())
