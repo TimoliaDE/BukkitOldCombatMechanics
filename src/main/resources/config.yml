@@ -359,6 +359,7 @@ projectile-shoot-offset:
   # Furthermore, the vertical offset when spawning a projectile is
   # modified to match 1.8 clients while sneaking, because it is
   # reduced much less in 1.8.
+  # It does not affect when the projectile is shot from a crossbow.
   # The horizontal/vertical offset applied when a player shoots a projectile
   xOffset: 0.16
   yOffset: -0.1

@@ -20,6 +20,7 @@ import org.bukkit.util.Vector;
  * Furthermore, the vertical offset when spawning a projectile is
  * modified to match 1.8 clients while sneaking, because it is
  * reduced much less in 1.8.
+ * It does not affect when the projectile is shot from a crossbow.
  */
 public class ModuleProjectileShootOffset extends OCMModule {
 
@@ -60,11 +61,15 @@ public class ModuleProjectileShootOffset extends OCMModule {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPlayerLaunchProjectile(PlayerLaunchProjectileEvent event) {
         Projectile proj = event.getProjectile();
-        boolean isEntity1_8 = proj instanceof AbstractArrow && !(proj instanceof Trident) ||
+
+        // Check if the projectile only exists in 1.8
+        // and is not shot from a crossbow when the projectile is an arrow
+        boolean isLegacyProj = proj instanceof AbstractArrow arrow && !(proj instanceof Trident) &&
+                (arrow.getWeapon() == null || arrow.getWeapon().getType() == Material.BOW) ||
                 proj instanceof Egg || proj instanceof EnderPearl || proj instanceof ThrownExpBottle ||
                 proj instanceof ThrownPotion || proj instanceof Snowball;
 
-        if (isEntity1_8) {
+        if (isLegacyProj) {
             Player player = event.getPlayer();
             EquipmentSlot hand = event.getItemStack().equals(player.getInventory().getItemInOffHand()) ?
                     EquipmentSlot.OFF_HAND : EquipmentSlot.HAND;
