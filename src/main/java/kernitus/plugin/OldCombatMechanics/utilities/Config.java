@@ -15,6 +15,7 @@ import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 
 import javax.annotation.Nullable;
 import java.io.InputStreamReader;
@@ -26,6 +27,7 @@ public class Config {
 
     private static final String CONFIG_NAME = "config.yml";
     private static final String DEFAULT_WORLD_KEY = "__default__";
+    private static final String MODESET_PERMISSION_PREFIX = "oldcombatmechanics.modeset.";
     private static OCMMain plugin;
     private static FileConfiguration config;
     private static final Map<String, Set<String>> modesets = new LinkedHashMap<>();
@@ -82,12 +84,14 @@ public class Config {
         reloadModesets();
         reloadWorlds();
 
-        //Set EntityDamagedByEntityListener to enabled if either of these modules is enabled
+        //Set EntityDamagedByEntityListener to enabled if any module using the old damage pipeline is enabled
         final EntityDamageByEntityListener EDBEL = EntityDamageByEntityListener.getINSTANCE();
         if (EDBEL != null) {
             EDBEL.setEnabled(moduleEnabled("old-tool-damage") ||
                     moduleEnabled("old-potion-effects")
                     || moduleEnabled("old-critical-hits")
+                    || moduleEnabled("old-armour-strength")
+                    || moduleEnabled("sword-blocking")
             );
         }
 
@@ -280,6 +284,34 @@ public class Config {
             return getModesetNames();
         }
         return getAllowedModesets(world.getUID());
+    }
+
+    public static Set<String> getAllowedModesets(Player player) {
+        if (player == null) {
+            return getModesetNames();
+        }
+
+        final Set<String> allowedModesets = getAllowedModesets(player.getWorld().getUID());
+        if (!modePermissionsEnabled()) {
+            return allowedModesets;
+        }
+
+        final LinkedHashSet<String> permittedModesets = allowedModesets.stream()
+                .filter(modesetName -> canUseModeset(player, modesetName))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return Collections.unmodifiableSet(permittedModesets);
+    }
+
+    public static boolean modePermissionsEnabled() {
+        return config.getBoolean("mode-permissions.enabled", false);
+    }
+
+    public static boolean canUseModeset(Player player, String modesetName) {
+        return !modePermissionsEnabled() || (player != null && player.hasPermission(getModesetPermission(modesetName)));
+    }
+
+    public static String getModesetPermission(String modesetName) {
+        return MODESET_PERMISSION_PREFIX + normaliseModesetName(modesetName);
     }
 
     public static Set<String> getModesetNames() {

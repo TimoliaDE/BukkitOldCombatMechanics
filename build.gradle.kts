@@ -8,7 +8,7 @@ plugins {
     `java-library`
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
     id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
-    id("com.gradleup.shadow") version "9.4.2"
+    id("com.gradleup.shadow") version "9.5.1"
     idea
 }
 
@@ -40,9 +40,9 @@ dependencies {
     // Shaded in by Bukkit
     compileOnly("io.netty:netty-all:4.1.130.Final")
     // Placeholder API
-    compileOnly("me.clip:placeholderapi:2.12.2")
+    compileOnly("me.clip:placeholderapi:2.12.3")
     // For BSON file serialisation
-    implementation("org.mongodb:bson:5.8.0")
+    implementation("org.mongodb:bson:5.9.0")
 //    // Spigot
 //    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
     // JSR-305 annotations (javax.annotation.Nullable)
@@ -52,7 +52,7 @@ dependencies {
     // PacketEvents
     implementation("com.github.retrooper:packetevents-spigot:2.13.0")
     // XSeries
-    implementation("com.github.cryptomorin:XSeries:13.7.0")
+    implementation("com.github.cryptomorin:XSeries:13.7.1")
 
     //For ingametesting
     // Mojang mappings for NMS

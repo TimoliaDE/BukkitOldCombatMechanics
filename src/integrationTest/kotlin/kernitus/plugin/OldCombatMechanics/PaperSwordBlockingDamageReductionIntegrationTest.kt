@@ -62,7 +62,7 @@ class PaperSwordBlockingDamageReductionIntegrationTest :
 
         fun setModeset(
             player: Player,
-            name: String
+            name: String,
         ) {
             val data = getPlayerData(player.uniqueId)
             data.setModesetForWorld(player.world.uid, name)
@@ -71,7 +71,7 @@ class PaperSwordBlockingDamageReductionIntegrationTest :
 
         fun equipSword(
             player: Player,
-            material: Material
+            material: Material,
         ) {
             player.inventory.setItemInMainHand(ItemStack(material))
             player.updateInventory()
@@ -85,7 +85,7 @@ class PaperSwordBlockingDamageReductionIntegrationTest :
                     player.inventory.itemInMainHand,
                     null,
                     org.bukkit.block.BlockFace.SELF,
-                    EquipmentSlot.HAND
+                    EquipmentSlot.HAND,
                 )
             Bukkit.getPluginManager().callEvent(event)
         }
@@ -120,7 +120,7 @@ class PaperSwordBlockingDamageReductionIntegrationTest :
 
         fun describeAdapterState(
             module: ModuleSwordBlocking,
-            player: Player
+            player: Player,
         ): String =
             try {
                 val adapterField = ModuleSwordBlocking::class.java.getDeclaredField("paperAdapter")
@@ -222,7 +222,7 @@ class PaperSwordBlockingDamageReductionIntegrationTest :
                             zombie,
                             defender,
                             EntityDamageEvent.DamageCause.ENTITY_ATTACK,
-                            2.5
+                            2.5,
                         )
                     }
 
@@ -234,6 +234,63 @@ class PaperSwordBlockingDamageReductionIntegrationTest :
             } finally {
                 runSync {
                     zombie.remove()
+                }
+            }
+        }
+
+        test("Paper sword blocking reduction ignores retained offline player-shaped damagers") {
+            if (!paperDataComponentApiPresent()) {
+                println("Skipping: Paper DataComponent API not present")
+                return@test
+            }
+
+            val originalPaperAnimation = ocm.config.get("sword-blocking.paper-animation")
+            runSync {
+                ocm.config.set("sword-blocking.paper-animation", true)
+                module.reload()
+            }
+
+            try {
+                val reduction =
+                    runSync {
+                        val world = Bukkit.getWorld("world") ?: error("world missing")
+                        val offlineFake = FakePlayer(testPlugin)
+
+                        try {
+                            offlineFake.spawn(Location(world, -4.5, 100.0, 0.0))
+                            val offlineDamager =
+                                Bukkit.getPlayer(offlineFake.uuid) ?: error("offline damager not found")
+                            setModeset(offlineDamager, "old")
+
+                            offlineFake.removePlayer()
+                            offlineDamager.isOnline shouldBe false
+
+                            val event =
+                                org.bukkit.event.entity.EntityDamageByEntityEvent(
+                                    offlineDamager,
+                                    defender,
+                                    EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+                                    2.5,
+                                )
+                            val result =
+                                runCatching {
+                                    module.applyPaperBlockingReduction(event, 2.5)
+                                }
+
+                            result.exceptionOrNull() shouldBe null
+                            result.getOrThrow()
+                        } finally {
+                            if (Bukkit.getPlayer(offlineFake.uuid) != null) {
+                                offlineFake.removePlayer()
+                            }
+                        }
+                    }
+
+                reduction shouldBe 0.0
+            } finally {
+                runSync {
+                    ocm.config.set("sword-blocking.paper-animation", originalPaperAnimation)
+                    module.reload()
                 }
             }
         }

@@ -13,6 +13,7 @@ import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.api.OldCombatMechanicsAPI
 import kernitus.plugin.OldCombatMechanics.api.PlayerModesetChangeEvent
@@ -58,12 +59,12 @@ class ModesetRulesIntegrationTest :
             setOf(
                 "modeset-listener",
                 "attack-cooldown-tracker",
-                "entity-damage-listener"
+                "entity-damage-listener",
             )
         val optionalModules =
             setOf(
                 "disable-attack-sounds",
-                "disable-sword-sweep-particles"
+                "disable-sword-sweep-particles",
             )
 
         lateinit var player: Player
@@ -82,14 +83,14 @@ class ModesetRulesIntegrationTest :
                         Callable {
                             action()
                             null
-                        }
+                        },
                     ).get()
             }
         }
 
         fun setModeset(
             player: Player,
-            modeset: String
+            modeset: String,
         ) {
             val playerData = getPlayerData(player.uniqueId)
             playerData.setModesetForWorld(player.world.uid, modeset)
@@ -103,7 +104,7 @@ class ModesetRulesIntegrationTest :
 
         fun restoreSection(
             path: String,
-            value: Any?
+            value: Any?,
         ) {
             ocm.config.set(path, null)
             when (value) {
@@ -126,7 +127,7 @@ class ModesetRulesIntegrationTest :
             always: List<String>,
             disabled: List<String>,
             modesets: Map<String, List<String>>,
-            worlds: Map<String, List<String>>
+            worlds: Map<String, List<String>>,
         ) {
             ocm.config.set("always_enabled_modules", always)
             ocm.config.set("disabled_modules", disabled)
@@ -142,20 +143,20 @@ class ModesetRulesIntegrationTest :
             always: List<String>,
             disabled: List<String>,
             modesets: Map<String, List<String>>,
-            worldModesets: List<String>
+            worldModesets: List<String>,
         ) {
             applyConfigWithWorlds(
                 always = always,
                 disabled = disabled,
                 modesets = modesets,
-                worlds = mapOf("world" to worldModesets)
+                worlds = mapOf("world" to worldModesets),
             )
         }
 
         fun completeAlways(
             always: List<String>,
             disabled: List<String>,
-            modesets: Map<String, List<String>>
+            modesets: Map<String, List<String>>,
         ): List<String> {
             val assigned = HashSet<String>()
             always.forEach { assigned.add(it.lowercase(Locale.ROOT)) }
@@ -181,18 +182,18 @@ class ModesetRulesIntegrationTest :
             val modesets =
                 mapOf(
                     "old" to listOf("disable-offhand"),
-                    "new" to listOf("old-potion-effects")
+                    "new" to listOf("old-potion-effects"),
                 )
             applyConfigWithWorlds(
                 always =
                     completeAlways(
                         always = emptyList(),
                         disabled = emptyList(),
-                        modesets = modesets
+                        modesets = modesets,
                     ),
                 disabled = emptyList(),
                 modesets = modesets,
-                worlds = worlds
+                worlds = worlds,
             )
         }
 
@@ -210,6 +211,8 @@ class ModesetRulesIntegrationTest :
             val originalDisabled = ocm.config.get("disabled_modules")
             val originalModesets = snapshotSection("modesets")
             val originalWorlds = snapshotSection("worlds")
+            val originalModePermissions = snapshotSection("mode-permissions")
+            val originalModeMessages = snapshotSection("mode-messages")
 
             try {
                 block()
@@ -219,6 +222,8 @@ class ModesetRulesIntegrationTest :
                     ocm.config.set("disabled_modules", originalDisabled)
                     restoreSection("modesets", originalModesets)
                     restoreSection("worlds", originalWorlds)
+                    restoreSection("mode-permissions", originalModePermissions)
+                    restoreSection("mode-messages", originalModeMessages)
                     ocm.saveConfig()
                     Config.reload()
                 }
@@ -240,6 +245,14 @@ class ModesetRulesIntegrationTest :
             }
         }
 
+        test("bundled config defines modeset permission defaults") {
+            runSync {
+                ocm.config.isSet("mode-permissions.enabled").shouldBeTrue()
+                ocm.config.getBoolean("mode-permissions.enabled").shouldBeFalse()
+                ocm.config.isSet("mode-messages.no-permission-modeset").shouldBeTrue()
+            }
+        }
+
         test("always-enabled modules apply regardless of modeset") {
             withConfig {
                 runSync {
@@ -251,16 +264,16 @@ class ModesetRulesIntegrationTest :
                                 modesets =
                                     mapOf(
                                         "old" to listOf("old-golden-apples"),
-                                        "new" to listOf("old-potion-effects")
-                                    )
+                                        "new" to listOf("old-potion-effects"),
+                                    ),
                             ),
                         disabled = emptyList(),
                         modesets =
                             mapOf(
                                 "old" to listOf("old-golden-apples"),
-                                "new" to listOf("old-potion-effects")
+                                "new" to listOf("old-potion-effects"),
                             ),
-                        worldModesets = listOf("old", "new")
+                        worldModesets = listOf("old", "new"),
                     )
 
                     setModeset(player, "old")
@@ -283,16 +296,16 @@ class ModesetRulesIntegrationTest :
                                 modesets =
                                     mapOf(
                                         "old" to listOf("old-golden-apples"),
-                                        "new" to listOf("old-potion-effects")
-                                    )
+                                        "new" to listOf("old-potion-effects"),
+                                    ),
                             ),
                         disabled = listOf("disable-offhand"),
                         modesets =
                             mapOf(
                                 "old" to listOf("old-golden-apples"),
-                                "new" to listOf("old-potion-effects")
+                                "new" to listOf("old-potion-effects"),
                             ),
-                        worldModesets = listOf("old", "new")
+                        worldModesets = listOf("old", "new"),
                     )
 
                     setModeset(player, "old")
@@ -315,16 +328,16 @@ class ModesetRulesIntegrationTest :
                                 modesets =
                                     mapOf(
                                         "old" to listOf("disable-offhand"),
-                                        "new" to listOf("old-potion-effects")
-                                    )
+                                        "new" to listOf("old-potion-effects"),
+                                    ),
                             ),
                         disabled = emptyList(),
                         modesets =
                             mapOf(
                                 "old" to listOf("disable-offhand"),
-                                "new" to listOf("old-potion-effects")
+                                "new" to listOf("old-potion-effects"),
                             ),
-                        worldModesets = listOf("old", "new")
+                        worldModesets = listOf("old", "new"),
                     )
 
                     setModeset(player, "old")
@@ -347,16 +360,16 @@ class ModesetRulesIntegrationTest :
                                 modesets =
                                     mapOf(
                                         "old" to listOf("sword-blocking"),
-                                        "new" to listOf("old-potion-effects")
-                                    )
+                                        "new" to listOf("old-potion-effects"),
+                                    ),
                             ),
                         disabled = emptyList(),
                         modesets =
                             mapOf(
                                 "old" to listOf("sword-blocking"),
-                                "new" to listOf("old-potion-effects")
+                                "new" to listOf("old-potion-effects"),
                             ),
-                        worldModesets = listOf("new")
+                        worldModesets = listOf("new"),
                     )
 
                     setModeset(player, "old")
@@ -374,8 +387,8 @@ class ModesetRulesIntegrationTest :
                     applySimpleModesetWorlds(
                         mapOf(
                             "__default__" to listOf("old"),
-                            "world" to listOf("new", "old")
-                        )
+                            "world" to listOf("new", "old"),
+                        ),
                     )
 
                     Config.getAllowedModesets(player.world.uid).toList().shouldContainExactly("new", "old")
@@ -401,8 +414,8 @@ class ModesetRulesIntegrationTest :
                     applySimpleModesetWorlds(
                         mapOf(
                             "__default__" to listOf("old"),
-                            "world" to emptyList()
-                        )
+                            "world" to emptyList(),
+                        ),
                     )
 
                     val allowedModesets = Config.getAllowedModesets(player.world.uid)
@@ -432,6 +445,132 @@ class ModesetRulesIntegrationTest :
             }
         }
 
+        test("mode command ignores modeset permissions when disabled by default") {
+            withConfig {
+                runSync {
+                    applySimpleModesetWorlds(mapOf("world" to listOf("old", "new")))
+                    ocm.config.set("mode-permissions.enabled", false)
+                    ocm.saveConfig()
+                    Config.reload()
+                    player.addAttachment(ocm, "oldcombatmechanics.commands", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.mode", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.mode.own", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.new", false)
+
+                    setModeset(player, "old")
+
+                    Bukkit.dispatchCommand(player, "ocm mode new") shouldBe true
+                    getPlayerData(player.uniqueId).getModesetForWorld(player.world.uid) shouldBe "new"
+                }
+            }
+        }
+
+        test("mode command requires target player modeset permission when enabled") {
+            withConfig {
+                runSync {
+                    applySimpleModesetWorlds(mapOf("world" to listOf("old", "new")))
+                    ocm.config.set("mode-permissions.enabled", true)
+                    ocm.config.set("mode-messages.no-permission-modeset", "&cNo access to that modeset!")
+                    ocm.saveConfig()
+                    Config.reload()
+                    player.addAttachment(ocm, "oldcombatmechanics.commands", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.mode", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.mode.own", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.old", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.new", false)
+
+                    setModeset(player, "new")
+
+                    Bukkit.dispatchCommand(player, "ocm mode old") shouldBe true
+                    getPlayerData(player.uniqueId).getModesetForWorld(player.world.uid) shouldBe "old"
+
+                    Bukkit.dispatchCommand(player, "ocm mode new") shouldBe true
+                    getPlayerData(player.uniqueId).getModesetForWorld(player.world.uid) shouldBe "old"
+                }
+            }
+        }
+
+        test("mode tab completion filters world modesets by player permissions") {
+            withConfig {
+                runSync {
+                    applySimpleModesetWorlds(
+                        mapOf(
+                            "__default__" to listOf("old", "new"),
+                            "world" to listOf("old"),
+                        ),
+                    )
+                    ocm.config.set("mode-permissions.enabled", true)
+                    ocm.saveConfig()
+                    Config.reload()
+                    player.addAttachment(ocm, "oldcombatmechanics.mode", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.mode.own", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.old", true)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.new", true)
+
+                    val command = checkNotNull(Bukkit.getPluginCommand("oldcombatmechanics"))
+                    val completions =
+                        checkNotNull(OCMCommandCompleter().onTabComplete(player, command, "ocm", arrayOf("mode", "")))
+
+                    completions.shouldContainExactly("old")
+                    completions.shouldNotContain("new")
+                }
+            }
+        }
+
+        test("join fallback chooses the first permitted world modeset when enabled") {
+            withConfig {
+                runSync {
+                    applySimpleModesetWorlds(mapOf("world" to listOf("old", "new")))
+                    ocm.config.set("mode-permissions.enabled", true)
+                    ocm.saveConfig()
+                    Config.reload()
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.old", false)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.new", true)
+
+                    setModeset(player, "old")
+                    Bukkit.getPluginManager().callEvent(PlayerJoinEvent(player, ""))
+
+                    getPlayerData(player.uniqueId).getModesetForWorld(player.world.uid) shouldBe "new"
+                }
+            }
+        }
+
+        test("join fallback clears stale stored modeset when no modesets are permitted") {
+            withConfig {
+                runSync {
+                    applySimpleModesetWorlds(mapOf("world" to listOf("old", "new")))
+                    ocm.config.set("mode-permissions.enabled", true)
+                    ocm.saveConfig()
+                    Config.reload()
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.old", false)
+                    player.addAttachment(ocm, "oldcombatmechanics.modeset.new", false)
+                    val events = mutableListOf<PlayerModesetChangeEvent>()
+                    val listener =
+                        object : Listener {
+                            @EventHandler
+                            fun onModesetChange(event: PlayerModesetChangeEvent) {
+                                if (event.player.uniqueId == player.uniqueId) {
+                                    events += event
+                                }
+                            }
+                        }
+                    Bukkit.getPluginManager().registerEvents(listener, testPlugin)
+
+                    try {
+                        setModeset(player, "old")
+                        Bukkit.getPluginManager().callEvent(PlayerJoinEvent(player, ""))
+
+                        getPlayerData(player.uniqueId).getModesetForWorld(player.world.uid) shouldBe null
+                        events.single().previousModeset shouldBe "old"
+                        events.single().newModeset shouldBe null
+                        events.single().reason shouldBe PlayerModesetChangeEvent.Reason.JOIN
+                    } finally {
+                        HandlerList.unregisterAll(listener)
+                    }
+                }
+            }
+        }
+
         test("modeset API stores valid modesets and normalises names") {
             withConfig {
                 runSync {
@@ -450,6 +589,9 @@ class ModesetRulesIntegrationTest :
 
                     try {
                         setModeset(player, "old")
+                        ocm.config.set("mode-permissions.enabled", true)
+                        ocm.saveConfig()
+                        Config.reload()
                         api.getModesetNames().toList().shouldContainExactly("old", "new")
                         api.getAllowedModesets(player.world).toList().shouldContainExactly("old", "new")
 
@@ -561,16 +703,16 @@ class ModesetRulesIntegrationTest :
                                     modesets =
                                         mapOf(
                                             "old" to listOf("old-potion-effects"),
-                                            "new" to listOf("old-golden-apples")
-                                        )
+                                            "new" to listOf("old-golden-apples"),
+                                        ),
                                 ),
                             disabled = listOf("disable-offhand"),
                             modesets =
                                 mapOf(
                                     "old" to listOf("old-potion-effects"),
-                                    "new" to listOf("old-golden-apples")
+                                    "new" to listOf("old-golden-apples"),
                                 ),
-                            worldModesets = listOf("old", "new")
+                            worldModesets = listOf("old", "new"),
                         )
                     }
                 }
@@ -596,7 +738,7 @@ class ModesetRulesIntegrationTest :
                             always = always,
                             disabled = emptyList(),
                             modesets = mapOf("old" to emptyList()),
-                            worldModesets = listOf("old")
+                            worldModesets = listOf("old"),
                         )
                     }
                 }

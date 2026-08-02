@@ -5,7 +5,6 @@
  */
 package kernitus.plugin.OldCombatMechanics.utilities.reflection;
 
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.type.ClassType;
 import org.bukkit.Bukkit;
 
 import java.lang.reflect.*;
@@ -14,28 +13,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Reflector {
-    private static String version;
-    private static int majorVersion, minorVersion, patchVersion;
+    private static final String UNKNOWN_VERSION = "unknown";
+
+    private static String version = UNKNOWN_VERSION;
+    private static int majorVersion = -1, minorVersion = -1, patchVersion = -1;
+    private static boolean versionKnown;
 
     static {
-        try {
-            // Split on the "-" to just get the version information
-            version = Bukkit.getServer().getBukkitVersion().split("-")[0];
-            final String[] splitVersion = version.split("\\.");
-
-            majorVersion = Integer.parseInt(splitVersion[0]);
-            minorVersion = Integer.parseInt(splitVersion[1]);
-            if(splitVersion.length > 2) {
-                patchVersion = Integer.parseInt(splitVersion[2]);
-            } else {
-                patchVersion = 0;
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to load Reflector: " + e.getMessage());
+        final MinecraftVersion parsedVersion = resolveMinecraftVersion();
+        if (parsedVersion != null) {
+            version = parsedVersion.toString();
+            majorVersion = parsedVersion.major;
+            minorVersion = parsedVersion.minor;
+            patchVersion = parsedVersion.patch;
+            versionKnown = true;
         }
     }
 
@@ -52,6 +49,10 @@ public class Reflector {
      * @return true if the server version is newer or equal to the one provided
      */
     public static boolean versionIsNewerOrEqualTo(int major, int minor, int patch) {
+        if (!versionKnown) {
+            return false;
+        }
+
         return VersionComparator.isNewerOrEqualTo(
                 getMajorVersion(),
                 getMinorVersion(),
@@ -74,8 +75,48 @@ public class Reflector {
         return patchVersion;
     }
 
-    public static Class<?> getClass(ClassType type, String name) {
-        return getClass(type.qualifyClassName(name));
+    private static MinecraftVersion resolveMinecraftVersion() {
+        MinecraftVersion parsedVersion = parseMinecraftVersion(getMinecraftVersion());
+        if (parsedVersion != null) {
+            return parsedVersion;
+        }
+
+        parsedVersion = parseMinecraftVersion(getBukkitVersion());
+        if (parsedVersion != null) {
+            return parsedVersion;
+        }
+
+        return parseMinecraftVersion(getServerVersion());
+    }
+
+    private static String getMinecraftVersion() {
+        try {
+            final Method getMinecraftVersion = Bukkit.class.getMethod("getMinecraftVersion");
+            final Object minecraftVersion = getMinecraftVersion.invoke(null);
+            return minecraftVersion instanceof String ? (String) minecraftVersion : null;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    private static String getBukkitVersion() {
+        try {
+            return Bukkit.getServer() == null ? null : Bukkit.getServer().getBukkitVersion();
+        } catch (RuntimeException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    private static String getServerVersion() {
+        try {
+            return Bukkit.getVersion();
+        } catch (RuntimeException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    static MinecraftVersion parseMinecraftVersion(String rawVersion) {
+        return MinecraftVersionParser.parse(rawVersion);
     }
 
     public static Class<?> getClass(String fqn) {
@@ -106,19 +147,6 @@ public class Reflector {
                 .peek(method -> method.setAccessible(true))
                 .findFirst()
                 .orElse(null);
-    }
-
-    public static Method getMethod(Class<?> clazz, String name, int parameterCount, Class<?>... parameterTypes) {
-        if (parameterTypes.length != parameterCount)
-            throw new IllegalArgumentException("Number of provided parameter classes does not match parameterCount");
-
-        return Arrays.stream(clazz.getMethods())
-                .filter(method -> method.getName().equals(name))
-                .filter(method -> method.getParameterCount() == parameterCount)
-                .filter(method -> Arrays.equals(method.getParameterTypes(), parameterTypes))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("No method '" + name +
-                        "' with the specified parameters found in " + clazz.getName()));
     }
 
     public static Method getMethod(Class<?> clazz, Class<?> returnType, String... parameterTypeSimpleNames){
@@ -216,16 +244,6 @@ public class Reflector {
 
     public static Field getField(Class<?> clazz, String fieldName) {
         try {
-            Field field = clazz.getField(fieldName);
-            field.setAccessible(true);
-            return field;
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static Field getDeclaredField(Class<?> clazz, String fieldName) {
-        try {
             Field field = clazz.getDeclaredField(fieldName);
             field.setAccessible(true);
             return field;
@@ -283,12 +301,10 @@ public class Reflector {
         return matchingField.get(object);
     }
 
-    public static <T> T getFieldValue(Field field, Object handle) {
+    public static Object getFieldValue(Field field, Object handle) {
         field.setAccessible(true);
         try {
-            @SuppressWarnings("unchecked")
-            T t = (T) field.get(handle);
-            return t;
+            return field.get(handle);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -330,36 +346,6 @@ public class Reflector {
                 .findFirst()
                 .orElse(null);
     }
-
-    public static Object newInstance(Constructor<?> constructor, Object... initArgs) {
-        try {
-            return constructor.newInstance(initArgs);
-        } catch (InvocationTargetException e) {
-            throw new RuntimeException("InvocationTargetException of " + constructor, e);
-        } catch (InstantiationException e) {
-            throw new RuntimeException("InstantiationException of " + constructor, e);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException("IllegalAccessException of " + constructor, e);
-        }
-    }
-
-    public static Constructor<?> newInstance(Class<?> clazz, String... parameterTypeSimpleNames) {
-        Function<Constructor<?>, List<String>> getParameterNames = constructor -> Arrays
-                .stream(constructor.getParameters())
-                .map(Parameter::getType)
-                .map(Class::getSimpleName)
-                .collect(Collectors.toList());
-        List<String> typeNames = Arrays.asList(parameterTypeSimpleNames);
-        return Stream.concat(
-                        Arrays.stream(clazz.getDeclaredConstructors()),
-                        Arrays.stream(clazz.getConstructors())
-                )
-                .filter(constructor -> getParameterNames.apply(constructor).equals(typeNames))
-                .peek(it -> it.setAccessible(true))
-                .findFirst()
-                .orElse(null);
-    }
-
 
     /**
      * Finds a constructor where the provided parameter types are assignable to the constructor parameters.
@@ -459,4 +445,61 @@ public class Reflector {
         void run() throws ReflectiveOperationException;
     }
 
+}
+
+final class MinecraftVersionParser {
+    private static final Pattern MINECRAFT_MARKER = Pattern.compile("\\(MC:\\s*([^)]*)\\)");
+    private static final Pattern NUMERIC_VERSION = Pattern.compile("(?<![0-9.])([1-9][0-9]*)\\.([0-9]+)(?:\\.([0-9]+))?(?![0-9.])");
+
+    private MinecraftVersionParser() {
+    }
+
+    static MinecraftVersion parse(String rawVersion) {
+        if (rawVersion == null) {
+            return null;
+        }
+
+        final Matcher marker = MINECRAFT_MARKER.matcher(rawVersion);
+        while (marker.find()) {
+            final MinecraftVersion parsed = parseNumericVersion(marker.group(1));
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+
+        return parseNumericVersion(rawVersion);
+    }
+
+    private static MinecraftVersion parseNumericVersion(String value) {
+        final Matcher matcher = NUMERIC_VERSION.matcher(value);
+        while (matcher.find()) {
+            try {
+                final int major = Integer.parseInt(matcher.group(1));
+                final int minor = Integer.parseInt(matcher.group(2));
+                final int patch = matcher.group(3) == null ? 0 : Integer.parseInt(matcher.group(3));
+                return new MinecraftVersion(major, minor, patch);
+            } catch (NumberFormatException ignored) {
+                // Keep looking for a realistic Minecraft version.
+            }
+        }
+
+        return null;
+    }
+}
+
+final class MinecraftVersion {
+    final int major;
+    final int minor;
+    final int patch;
+
+    MinecraftVersion(int major, int minor, int patch) {
+        this.major = major;
+        this.minor = minor;
+        this.patch = patch;
+    }
+
+    @Override
+    public String toString() {
+        return major + "." + minor + "." + patch;
+    }
 }

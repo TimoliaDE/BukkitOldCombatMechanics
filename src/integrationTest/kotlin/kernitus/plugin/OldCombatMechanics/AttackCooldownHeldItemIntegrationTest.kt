@@ -7,9 +7,11 @@
 package kernitus.plugin.OldCombatMechanics
 
 import com.cryptomorin.xseries.XAttribute
+import io.kotest.assertions.withClue
 import io.kotest.common.ExperimentalKotest
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.doubles.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.module.ModuleAttackCooldown
 import kernitus.plugin.OldCombatMechanics.utilities.Config
@@ -19,7 +21,10 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
+import org.bukkit.attribute.AttributeInstance
+import org.bukkit.entity.EntityType
 import org.bukkit.entity.Player
+import org.bukkit.entity.Zombie
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -48,17 +53,20 @@ class AttackCooldownHeldItemIntegrationTest :
                 Bukkit.getScheduler().callSyncMethod(testPlugin, Callable { action() }).get()
             }
 
-        fun currentAttackSpeed(player: Player): Double {
+        fun attackSpeedAttribute(player: Player): AttributeInstance {
             val attackSpeedAttribute =
                 checkNotNull(XAttribute.ATTACK_SPEED.get()) { "Missing attack speed attribute type" }
-            val attribute = player.getAttribute(attackSpeedAttribute) ?: error("Missing attack speed attribute")
-            return attribute.baseValue
+            return player.getAttribute(attackSpeedAttribute) ?: error("Missing attack speed attribute")
         }
+
+        fun currentAttackSpeed(player: Player): Double = attackSpeedAttribute(player).baseValue
+
+        fun effectiveAttackSpeed(player: Player): Double = attackSpeedAttribute(player).value
 
         fun setModeset(
             player: Player,
             world: World,
-            modeset: String
+            modeset: String,
         ) {
             val data = PlayerStorage.getPlayerData(player.uniqueId)
             data.setModesetForWorld(world.uid, modeset)
@@ -72,7 +80,7 @@ class AttackCooldownHeldItemIntegrationTest :
         fun switchHotbar(
             player: Player,
             from: Int,
-            to: Int
+            to: Int,
         ) {
             player.inventory.heldItemSlot = to
             Bukkit.getPluginManager().callEvent(PlayerItemHeldEvent(player, from, to))
@@ -80,7 +88,7 @@ class AttackCooldownHeldItemIntegrationTest :
 
         data class SpawnedPlayer(
             val fake: FakePlayer,
-            val player: Player
+            val player: Player,
         )
 
         fun spawnFake(world: World): SpawnedPlayer {
@@ -109,7 +117,7 @@ class AttackCooldownHeldItemIntegrationTest :
         suspend fun withAttackCooldownConfig(
             genericAttackSpeed: Double,
             heldItemAttackSpeeds: Map<String, Double>,
-            block: suspend () -> Unit
+            block: suspend () -> Unit,
         ) {
             val disabledModules = ocm.config.getStringList("disabled_modules")
             val alwaysEnabledModules = ocm.config.getStringList("always_enabled_modules")
@@ -143,7 +151,7 @@ class AttackCooldownHeldItemIntegrationTest :
                     alwaysEnabledModules.filterNot {
                         it ==
                             "disable-attack-cooldown"
-                    }
+                    },
                 )
 
                 val oldModeset =
@@ -175,7 +183,7 @@ class AttackCooldownHeldItemIntegrationTest :
         test("applies configured held-item attack speeds and falls back to the generic value on hotbar switch") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -200,7 +208,7 @@ class AttackCooldownHeldItemIntegrationTest :
         test("materials without an explicit held-item entry use disable-attack-cooldown.generic-attack-speed") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 13.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -219,11 +227,11 @@ class AttackCooldownHeldItemIntegrationTest :
 
         test(
             "world and modeset transitions restore vanilla 4.0 when disabled " +
-                "and reapply the held-item target when re-enabled"
+                "and reapply the held-item target when re-enabled",
         ) {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val otherWorld = checkNotNull(Bukkit.getWorld("world_nether"))
@@ -275,7 +283,7 @@ class AttackCooldownHeldItemIntegrationTest :
 
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf(material.name to 7.0)
+                heldItemAttackSpeeds = mapOf(material.name to 7.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -292,10 +300,60 @@ class AttackCooldownHeldItemIntegrationTest :
             }
         }
 
+        test("wooden spear held-item attack cooldown restarts after attacking in old mode") {
+            val spear = Material.matchMaterial("WOODEN_SPEAR") ?: return@test
+            val targetAttackSpeed = 1.54
+
+            withAttackCooldownConfig(
+                genericAttackSpeed = 40.0,
+                heldItemAttackSpeeds = mapOf(spear.name to targetAttackSpeed),
+            ) {
+                val world = checkNotNull(Bukkit.getWorld("world"))
+                val spawned = spawnFake(world)
+                var zombie: Zombie? = null
+
+                try {
+                    runSync {
+                        spawned.player.inventory.setItemInMainHand(ItemStack(spear))
+                        fireJoin(spawned.player)
+                        val spawnedZombie =
+                            world.spawnEntity(
+                                spawned.player.location
+                                    .clone()
+                                    .add(0.0, 0.0, 2.0),
+                                EntityType.ZOMBIE,
+                            ) as Zombie
+                        zombie = spawnedZombie
+                        spawnedZombie.apply {
+                            isSilent = true
+                            maximumNoDamageTicks = 0
+                            noDamageTicks = 0
+                        }
+                        spawned.fake.attack(spawnedZombie)
+                    }
+                    waitForPossibleDeferredWork()
+
+                    val cooldownAfterAttack = runSync { spawned.player.attackCooldown.toDouble() }
+                    val baseAttackSpeed = runSync { currentAttackSpeed(spawned.player) }
+                    val effectiveAttackSpeed = runSync { effectiveAttackSpeed(spawned.player) }
+
+                    withClue(
+                        "cooldownAfterAttack=$cooldownAfterAttack " +
+                            "baseAttackSpeed=$baseAttackSpeed effectiveAttackSpeed=$effectiveAttackSpeed",
+                    ) {
+                        cooldownAfterAttack.shouldBeGreaterThan(0.0)
+                    }
+                } finally {
+                    runSync { zombie?.remove() }
+                    cleanup(spawned)
+                }
+            }
+        }
+
         test("main-hand attack speed follows hand swaps and uses the newly held item") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -313,7 +371,7 @@ class AttackCooldownHeldItemIntegrationTest :
                             PlayerSwapHandItemsEvent(
                                 spawned.player,
                                 spawned.player.inventory.itemInMainHand,
-                                spawned.player.inventory.itemInOffHand
+                                spawned.player.inventory.itemInOffHand,
                             )
                         Bukkit.getPluginManager().callEvent(swap)
                         spawned.player.inventory.setItemInMainHand(swap.offHandItem)
@@ -329,7 +387,7 @@ class AttackCooldownHeldItemIntegrationTest :
         test("cancelled hotbar changes keep attack speed tied to the actually held item") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -370,7 +428,7 @@ class AttackCooldownHeldItemIntegrationTest :
         test("cancelled hand swaps keep attack speed tied to the actual main-hand item") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -398,7 +456,7 @@ class AttackCooldownHeldItemIntegrationTest :
                             PlayerSwapHandItemsEvent(
                                 spawned.player,
                                 spawned.player.inventory.itemInMainHand,
-                                spawned.player.inventory.itemInOffHand
+                                spawned.player.inventory.itemInOffHand,
                             )
                         Bukkit.getPluginManager().callEvent(event)
                     }
@@ -415,7 +473,7 @@ class AttackCooldownHeldItemIntegrationTest :
         test("later inventory changes after a hotbar event do not trigger deferred attack-speed reconciliation") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -450,7 +508,7 @@ class AttackCooldownHeldItemIntegrationTest :
         test("unchanged post-swap inventory keeps the swap-applied attack speed without deferred re-checking") {
             withAttackCooldownConfig(
                 genericAttackSpeed = 12.0,
-                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0)
+                heldItemAttackSpeeds = mapOf("IRON_SWORD" to 19.0),
             ) {
                 val world = checkNotNull(Bukkit.getWorld("world"))
                 val spawned = spawnFake(world)
@@ -468,7 +526,7 @@ class AttackCooldownHeldItemIntegrationTest :
                             PlayerSwapHandItemsEvent(
                                 spawned.player,
                                 spawned.player.inventory.itemInMainHand,
-                                spawned.player.inventory.itemInOffHand
+                                spawned.player.inventory.itemInOffHand,
                             )
                         Bukkit.getPluginManager().callEvent(event)
                         spawned.player.inventory.setItemInMainHand(event.offHandItem)

@@ -9,15 +9,15 @@
 #  contents: write
 #  pull-requests: write
 #
-# jobs:
+#jobs:
 #  release:
 #    runs-on: ubuntu-latest
 #
 #    steps:
-#      - uses: actions/checkout@v6
+#      - uses: actions/checkout@v7
 #
 #      - name: release-please
-#        uses: googleapis/release-please-action@v4
+#        uses: googleapis/release-please-action@v5
 #        with:
 #          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 #          config-file: .github/release-please-config.json
