@@ -310,6 +310,7 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleOldFallDamage(this));
         ModuleLoader.addModule(new ModuleOldBucketPlacement(this));
         ModuleLoader.addModule(new ModuleDamageInsideWall(this));
+        ModuleLoader.addModule(new ModuleOldAttackRange(this));
         ModuleLoader.addModule(new ModulePlayerRegen(this));
 
         ModuleLoader.addModule(new ModuleDisableCrafting(this));

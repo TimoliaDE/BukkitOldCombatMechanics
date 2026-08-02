@@ -21,7 +21,7 @@ idea {
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
-version = "v2.5.0-2026_07_20" // x-release-please-version
+version = "v2.5.1-2026_08_02" // x-release-please-version
 description = "OldCombatMechanics"
 
 allprojects {
@@ -50,7 +50,7 @@ dependencies {
     // ProtocolLib
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     // PacketEvents
-    implementation("com.github.retrooper:packetevents-spigot:2.12.1")
+    implementation("com.github.retrooper:packetevents-spigot:2.13.0")
     // XSeries
     implementation("com.github.cryptomorin:XSeries:13.7.0")
 

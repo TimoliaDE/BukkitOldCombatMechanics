@@ -8,6 +8,7 @@ package kernitus.plugin.OldCombatMechanics.module;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.ConfigUtils;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
+import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.HumanEntity;
@@ -40,6 +41,7 @@ public class ModuleDisableOffHand extends OCMModule {
     private List<Material> materials;
     private String deniedMessage;
     private BlockType blockType;
+    private boolean legacyClientsRequired;
 
     // Cache reflective methods used on older versions
     private static volatile boolean useReflectionViewPath = false;
@@ -57,6 +59,7 @@ public class ModuleDisableOffHand extends OCMModule {
         blockType = module().getBoolean("whitelist") ? BlockType.WHITELIST : BlockType.BLACKLIST;
         materials = ConfigUtils.loadMaterialList(module(), "items");
         deniedMessage = module().getString("denied-message");
+        legacyClientsRequired = module().getBoolean("legacyClientsRequired", false);
     }
 
     private void sendDeniedMessage(CommandSender sender) {
@@ -67,6 +70,8 @@ public class ModuleDisableOffHand extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onSwapHandItems(PlayerSwapHandItemsEvent e) {
         final Player player = e.getPlayer();
+        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+
         if (isEnabled(player) && isItemBlocked(e.getOffHandItem())) {
             e.setCancelled(true);
             sendDeniedMessage(player);
@@ -78,6 +83,9 @@ public class ModuleDisableOffHand extends OCMModule {
         final HumanEntity player = e.getWhoClicked();
         if (!isEnabled(player))
             return;
+
+        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+
         final ClickType clickType = e.getClick();
 
         try {
@@ -161,6 +169,8 @@ public class ModuleDisableOffHand extends OCMModule {
                 || !e.getInventorySlots().contains(OFFHAND_SLOT))
             return;
 
+        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+
         if (isItemBlocked(e.getOldCursor())) {
             e.setResult(Event.Result.DENY);
             sendDeniedMessage(player);
@@ -176,6 +186,8 @@ public class ModuleDisableOffHand extends OCMModule {
     public void onModesetChange(Player player) {
         if (!isEnabled(player))
             return;
+
+        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
 
         final PlayerInventory inventory = player.getInventory();
         final ItemStack offHandItem = inventory.getItemInOffHand();
