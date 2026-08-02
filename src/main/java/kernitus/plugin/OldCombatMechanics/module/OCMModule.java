@@ -5,11 +5,9 @@
  */
 package kernitus.plugin.OldCombatMechanics.module;
 
-import kernitus.plugin.OldCombatMechanics.api.PlayerModuleOverride;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.Config;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
-import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerModuleOverrides;
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -74,13 +72,14 @@ public abstract class OCMModule implements Listener {
             return false;
         }
 
-        final PlayerModuleOverride playerOverride = PlayerModuleOverrides.getOverride(humanEntity, configName);
-        if (playerOverride == PlayerModuleOverride.FORCE_ENABLED) {
-            return true;
-        }
-        if (playerOverride == PlayerModuleOverride.FORCE_DISABLED) {
-            return false;
-        }
+        // Edit
+//        final PlayerModuleOverride playerOverride = PlayerModuleOverrides.getOverride(humanEntity, configName);
+//        if (playerOverride == PlayerModuleOverride.FORCE_ENABLED) {
+//            return true;
+//        }
+//        if (playerOverride == PlayerModuleOverride.FORCE_DISABLED) {
+//            return false;
+//        }
 
         if (Config.isModuleDisabled(configName)) {
             return false;

@@ -5,6 +5,7 @@
  */
 package kernitus.plugin.OldCombatMechanics.utilities.reflection;
 
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.type.ClassType;
 import org.bukkit.Bukkit;
 
 import java.lang.reflect.*;
@@ -301,15 +302,6 @@ public class Reflector {
         return matchingField.get(object);
     }
 
-    public static Object getFieldValue(Field field, Object handle) {
-        field.setAccessible(true);
-        try {
-            return field.get(handle);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     public static void setFieldValue(Field field, Object handle, Object value) {
         field.setAccessible(true);
         try {
@@ -433,6 +425,34 @@ public class Reflector {
         try {
             runnable.run();
         } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Class<?> getClass(ClassType type, String name) {
+        return getClass(type.qualifyClassName(name));
+    }
+
+    public static Method getMethod(Class<?> clazz, String name, int parameterCount, Class<?>... parameterTypes) {
+        if (parameterTypes.length != parameterCount)
+            throw new IllegalArgumentException("Number of provided parameter classes does not match parameterCount");
+
+        return Arrays.stream(clazz.getMethods())
+                .filter(method -> method.getName().equals(name))
+                .filter(method -> method.getParameterCount() == parameterCount)
+                .filter(method -> Arrays.equals(method.getParameterTypes(), parameterTypes))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No method '" + name +
+                        "' with the specified parameters found in " + clazz.getName()));
+    }
+
+    public static <T> T getFieldValue(Field field, Object handle) {
+        field.setAccessible(true);
+        try {
+            @SuppressWarnings("unchecked")
+            T t = (T) field.get(handle);
+            return t;
+        } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
     }
