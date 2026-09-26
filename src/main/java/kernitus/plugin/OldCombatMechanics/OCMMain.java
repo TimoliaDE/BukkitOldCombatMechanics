@@ -8,6 +8,8 @@ package kernitus.plugin.OldCombatMechanics;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.EventManager;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import kernitus.plugin.OldCombatMechanics.commands.OCMCommandCompleter;
 import kernitus.plugin.OldCombatMechanics.commands.OCMCommandHandler;
@@ -302,6 +304,7 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleGoldenApple(this));
         ModuleLoader.addModule(new ModuleFishingKnockback(this));
         ModuleLoader.addModule(new ModulePlayerKnockback(this));
+        ModuleLoader.addModule(new ModuleVisibleWindCharge(this));
         ModuleLoader.addModule(new ModuleOldProjectileTrajectory(this));
         ModuleLoader.addModule(new ModuleProjectileShootOffset(this));
         ModuleLoader.addModule(new ModuleRelativeProjectileVelocity(this));

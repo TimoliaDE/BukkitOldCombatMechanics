@@ -6,9 +6,9 @@
 
 plugins {
     `java-library`
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
-    id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
-    id("com.gradleup.shadow") version "9.5.1"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.24"
+    id("xyz.jpenilla.run-paper") version "3.1.0" // Adds runServer and runMojangMappedServer tasks for testing
+    id("com.gradleup.shadow") version "9.6.1"
     idea
 }
 
@@ -21,7 +21,7 @@ idea {
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
-version = "v2.5.1-2026_08_02" // x-release-please-version
+version = "v2.5.1-2026_08_15" // x-release-please-version
 description = "OldCombatMechanics"
 
 allprojects {
@@ -42,7 +42,7 @@ dependencies {
     // Placeholder API
     compileOnly("me.clip:placeholderapi:2.12.3")
     // For BSON file serialisation
-    implementation("org.mongodb:bson:5.9.0")
+    implementation("org.mongodb:bson:5.9.2")
 //    // Spigot
 //    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
     // JSR-305 annotations (javax.annotation.Nullable)

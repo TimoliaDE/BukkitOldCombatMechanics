@@ -9,7 +9,7 @@ import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.entity.EntityShootBowEvent;
+import org.bukkit.event.entity.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
@@ -62,8 +62,8 @@ public class ModuleProjectileShootOffset extends OCMModule {
     public void onPlayerLaunchProjectile(PlayerLaunchProjectileEvent event) {
         Projectile proj = event.getProjectile();
 
-        // Check if the projectile only exists in 1.8
-        // and is not shot from a crossbow when the projectile is an arrow
+        // Check if the projectile only exists in 1.8, is not a fireball type,
+        // and is not an arrow shot from a crossbow.
         boolean isLegacyProj = proj instanceof AbstractArrow arrow && !(proj instanceof Trident) &&
                 (arrow.getWeapon() == null || arrow.getWeapon().getType() == Material.BOW) ||
                 proj instanceof Egg || proj instanceof EnderPearl || proj instanceof ThrownExpBottle ||
@@ -71,8 +71,10 @@ public class ModuleProjectileShootOffset extends OCMModule {
 
         if (isLegacyProj) {
             Player player = event.getPlayer();
-            EquipmentSlot hand = event.getItemStack().equals(player.getInventory().getItemInOffHand()) ?
-                    EquipmentSlot.OFF_HAND : EquipmentSlot.HAND;
+            ItemStack mainHandItem = player.getInventory().getItemInMainHand();
+
+            EquipmentSlot hand = event.getItemStack().equals(mainHandItem) ?
+                    EquipmentSlot.HAND : EquipmentSlot.OFF_HAND;
             shiftProjectileSpawnLocation(player, proj, hand);
         }
     }

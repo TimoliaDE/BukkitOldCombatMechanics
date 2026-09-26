@@ -10,6 +10,7 @@ This is an extension of the original **OldCombatMechanics** plugin ([link to ori
 The following options have been added to the config
 (details for each can be found in the config file):
 
+- `visible-wind-charge`
 - `old-projectile-trajectory`
 - `projectile-shoot-offset`
 - `relative-projectile-velocity`

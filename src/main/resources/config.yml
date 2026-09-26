@@ -51,6 +51,7 @@ modesets:
     - "disable-sword-sweep"
     - "disable-new-attack-particles"
     - "old-player-knockback"
+    - "visible-wind-charge"
     - "old-projectile-trajectory"
     - "projectile-shoot-offset"
     - "relative-projectile-velocity"
@@ -354,6 +355,12 @@ old-player-knockback:
   # sword-blocking is enabled.
   no-deflect-arrow: true
 
+visible-wind-charge:
+  # Makes wind charges visible to clients that do not support them (1.20.2 and older)
+  # by using an ender eye as a visual representation.
+  # Adds custom particles to make the wind charge more visible.
+  with-particles: true
+
 old-projectile-trajectory:
   # It changes the spread when shooting a projectile to match 1.8 behavior,
   # making projectiles shoot slightly more accurately than in newer versions.
@@ -445,7 +452,7 @@ old-attack-range:
   # (3.0 blocks) due to technical limitations.
   enabled: true
   # This determines the attack range value.
-  entityInteractionRange: 3.0875
+  entityInteractionRange: 3.1125
   # If enabled, this module only applies when 1.8 clients are allowed.
   requiresLegacyClients: true
 
