@@ -66,6 +66,7 @@ This file holds always-on repository guidance and routing hints. Detailed workfl
 
 - Module assignment is strict for configurable modules at top-level category scope: every non-internal module must appear in at most one of `always_enabled_modules`, `disabled_modules`, or the aggregate `modesets` category. A module may appear in more than one individual modeset because modesets are alternative player modes.
 - Internal modules (`modeset-listener`, `attack-cooldown-tracker`, `entity-damage-listener`) are always enabled and must not be listed in configurable module groups.
+- bStats `enabled_modules` reports servers enabling each configurable module. `enabled_modules_count` (pie) and `enabled_modules_count_bar` (bar) report the distribution of enabled configurable module counts per server. All three exclude internal modules; the count charts include zero.
 - Reload/enable must fail for invalid module assignment rather than silently choosing a fallback.
 - Modules are enabled/disabled solely via `always_enabled_modules`, `disabled_modules`, and `modesets`; there is no per-module `enabled:` toggle.
 - When adding new integration test specs, add them to the explicit `.withClasses(...)` list in `KotestRunner` because autoscan is disabled.

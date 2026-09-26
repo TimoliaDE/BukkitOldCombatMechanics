@@ -51,10 +51,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class OCMMain extends JavaPlugin {
 
@@ -145,12 +148,11 @@ public class OCMMain extends JavaPlugin {
             return cleaned.isEmpty() ? "Unknown" : cleaned;
         }));
 
-        // Simple bar chart (kept in case bStats re-enables bar display)
+        // Number of servers enabling each configurable module.
         metrics.addCustomChart(
                 new SimpleBarChart(
                         "enabled_modules",
-                        () -> ModuleLoader.getModules().stream()
-                                .filter(OCMModule::isEnabled)
+                        () -> getEnabledConfigurableModules()
                                 .collect(Collectors.toMap(OCMModule::toString, module -> 1))));
 
         // Pie chart of enabled/disabled for each module
@@ -158,11 +160,11 @@ public class OCMMain extends JavaPlugin {
                 new SimplePie(module.getModuleName() + "_pie",
                         () -> module.isEnabled() ? "enabled" : "disabled")));
 
-        // Simple pie: exact count of enabled modules per server (as a string key).
-        metrics.addCustomChart(new SimplePie("enabled_modules_count", () -> {
-            int count = (int) ModuleLoader.getModules().stream().filter(OCMModule::isEnabled).count();
-            return Integer.toString(count);
-        }));
+        // Distribution of enabled configurable module counts across servers.
+        metrics.addCustomChart(new SimplePie("enabled_modules_count",
+                () -> Long.toString(getEnabledConfigurableModules().count())));
+        metrics.addCustomChart(new SimpleBarChart("enabled_modules_count_bar",
+                () -> Collections.singletonMap(Long.toString(getEnabledConfigurableModules().count()), 1)));
 
         enableListeners.forEach(Runnable::run);
 
@@ -213,6 +215,13 @@ public class OCMMain extends JavaPlugin {
 
     public boolean isLatestNmsPackage() {
         return isLatestNmsPackage;
+    }
+
+    private static Stream<OCMModule> getEnabledConfigurableModules() {
+        final Set<String> configurableNames = ModuleLoader.getConfigurableModuleNames();
+        return ModuleLoader.getModules().stream()
+                .filter(module -> configurableNames.contains(ModuleLoader.normaliseModuleName(module.getConfigName())))
+                .filter(OCMModule::isEnabled);
     }
 
     @Override

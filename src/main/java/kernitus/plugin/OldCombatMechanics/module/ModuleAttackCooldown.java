@@ -71,7 +71,7 @@ public class ModuleAttackCooldown extends OCMModule {
         if (e.isCancelled()) {
             adjustAttackSpeed(e.getPlayer());
         } else {
-            adjustAttackSpeed(e.getPlayer(), e.getOffHandItem());
+            adjustAttackSpeed(e.getPlayer(), e.getMainHandItem());
         }
     }
 
