@@ -29,7 +29,7 @@ always_enabled_modules:
 disabled_modules:
 # Modules listed here are always disabled, regardless of modeset.
 # Of course, disabling a module which disables something will enable that something!
-- "attack-range"
+- "old-attack-range"
 
 modesets:
   # Modesets are lists of modules that are enabled for a player in that mode.
@@ -41,6 +41,7 @@ modesets:
   old:
     - "disable-attack-cooldown"
     - "attack-frequency"
+    - "attack-range"
     - "old-tool-damage"
     - "old-critical-hits"
     - "old-player-regen"
@@ -63,7 +64,7 @@ modesets:
     - "old-fall-damage"
     - "old-bucket-placement"
     - "damage-inside-wall"
-    - "old-attack-range"
+    - "attack-range"
     - "old-fishing-knockback"
     - "fishing-rod-velocity"
     - "projectile-knockback"
@@ -450,7 +451,6 @@ old-attack-range:
   # When enabled, this applies to 1.8 clients and 1.20.5+ clients only.
   # However, 1.9–1.20.4 clients still have the new attack range
   # (3.0 blocks) due to technical limitations.
-  enabled: true
   # This determines the attack range value.
   entityInteractionRange: 3.1125
   # If enabled, this module only applies when 1.8 clients are allowed.
@@ -684,8 +684,8 @@ disable-offhand:
   items: [ ]
   # Message to send user when denied. Set to '' to disable
   denied-message: ""
-  # If enabled, this module only applies when 1.8 clients are allowed.
-  legacyClientsRequired: true
+  # If enabled, this does not affect modern clients (versions newer than 1.9).
+  legacyClientsOnly: true
 
 old-brewing-stand:
   # Automatically refuels brewing stands

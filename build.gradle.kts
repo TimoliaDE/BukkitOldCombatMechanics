@@ -21,7 +21,7 @@ idea {
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
-version = "v2.5.1-2026_08_15" // x-release-please-version
+version = "v2.6.0-2026_08_15" // x-release-please-version
 description = "OldCombatMechanics"
 
 allprojects {
@@ -50,7 +50,7 @@ dependencies {
     // ProtocolLib
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     // PacketEvents
-    implementation("com.github.retrooper:packetevents-spigot:2.13.0")
+    implementation("com.github.retrooper:packetevents-spigot:2.14.0")
     // XSeries
     implementation("com.github.cryptomorin:XSeries:13.7.1")
 
@@ -61,7 +61,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     // For reflection remapping
     implementation("xyz.jpenilla:reflection-remapper:0.1.3")
-    compileOnly("com.viaversion:viaversion-api:5.10.0")
+    compileOnly("com.viaversion:viaversion-api:5.12.0")
 }
 
 java {

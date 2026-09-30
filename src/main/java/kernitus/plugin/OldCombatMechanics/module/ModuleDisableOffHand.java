@@ -11,7 +11,6 @@ import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import kernitus.plugin.OldCombatMechanics.versions.ViaVersionUtil;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -39,7 +38,7 @@ public class ModuleDisableOffHand extends OCMModule {
     private List<Material> materials;
     private String deniedMessage;
     private BlockType blockType;
-    private boolean legacyClientsRequired;
+    private boolean legacyClientsOnly;
 
     public ModuleDisableOffHand(OCMMain plugin) {
         super(plugin, "disable-offhand");
@@ -51,7 +50,7 @@ public class ModuleDisableOffHand extends OCMModule {
         blockType = module().getBoolean("whitelist") ? BlockType.WHITELIST : BlockType.BLACKLIST;
         materials = ConfigUtils.loadMaterialList(module(), "items");
         deniedMessage = module().getString("denied-message");
-        legacyClientsRequired = module().getBoolean("legacyClientsRequired", false);
+        legacyClientsOnly = module().getBoolean("legacyClientsOnly", false);
     }
 
     private void sendDeniedMessage(CommandSender sender) {
@@ -62,7 +61,7 @@ public class ModuleDisableOffHand extends OCMModule {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onSwapHandItems(PlayerSwapHandItemsEvent e) {
         final Player player = e.getPlayer();
-        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+        if (legacyClientsOnly && !ViaVersionUtil.isLegacyClient(player)) return;
 
         if (isEnabled(player) && isItemBlocked(e.getOffHandItem())) {
             e.setCancelled(true);
@@ -72,11 +71,12 @@ public class ModuleDisableOffHand extends OCMModule {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent e) {
-        final HumanEntity player = e.getWhoClicked();
+        if (!(e.getWhoClicked() instanceof Player player)) return;
+
         if (!isEnabled(player))
             return;
 
-        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+        if (legacyClientsOnly && !ViaVersionUtil.isLegacyClient(player)) return;
 
         final ClickType clickType = e.getClick();
 
@@ -121,13 +121,13 @@ public class ModuleDisableOffHand extends OCMModule {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent e) {
-        final HumanEntity player = e.getWhoClicked();
+        if (!(e.getWhoClicked() instanceof Player player)) return;
         if (!isEnabled(player)
                 || e.getInventory().getType() != InventoryType.CRAFTING
                 || !e.getInventorySlots().contains(OFFHAND_SLOT))
             return;
 
-        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+        if (legacyClientsOnly && !ViaVersionUtil.isLegacyClient(player)) return;
 
         if (isItemBlocked(e.getOldCursor())) {
             e.setResult(Event.Result.DENY);
@@ -145,7 +145,7 @@ public class ModuleDisableOffHand extends OCMModule {
         if (!isEnabled(player))
             return;
 
-        if (legacyClientsRequired && !ViaVersionUtil.isLegacyClientsAllowed()) return;
+        if (legacyClientsOnly && !ViaVersionUtil.isLegacyClient(player)) return;
 
         final PlayerInventory inventory = player.getInventory();
         final ItemStack offHandItem = inventory.getItemInOffHand();
