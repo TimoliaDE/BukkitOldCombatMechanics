@@ -6,8 +6,13 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance;
 import com.cryptomorin.xseries.XEntityType;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.SpigotFunctionChooser;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
+import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.lang.reflect.Constructor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.*;
@@ -15,8 +20,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.util.Vector;
 
@@ -28,7 +31,8 @@ public class ModuleFishingKnockback extends OCMModule {
     private final SpigotFunctionChooser<PlayerFishEvent, Object, Entity> getHookFunction;
     private final SpigotFunctionChooser<ProjectileHitEvent, Object, Entity> getHitEntityFunction;
     private boolean knockbackNonPlayerEntities;
-    private final Deque<RodDamageAttempt> damageAttempts = new ArrayDeque<>();
+    private LegacyHitAccess legacyHitAccess;
+    private boolean legacyHitAccessChecked;
 
     public ModuleFishingKnockback(OCMMain plugin) {
         super(plugin, "old-fishing-knockback");
@@ -43,7 +47,7 @@ public class ModuleFishingKnockback extends OCMModule {
 
     @Override
     public void reload() {
-        knockbackNonPlayerEntities = isSettingEnabled("knockbackNonPlayerEntities");
+        knockbackNonPlayerEntities = module().getBoolean("knockbackNonPlayerEntities", true);
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
@@ -63,10 +67,6 @@ public class ModuleFishingKnockback extends OCMModule {
             return;
 
         Entity hitEntity = getHitEntityFunction.apply(event);
-        if (hitEntity == null) {
-            hitEntity = findNearbyHitEntity(hookEntity);
-        }
-
         if (hitEntity == null)
             return; // If no entity was hit
         if (!(hitEntity instanceof LivingEntity))
@@ -80,17 +80,8 @@ public class ModuleFishingKnockback extends OCMModule {
         if (hitEntity.hasMetadata("NPC"))
             return;
 
-        if (!knockbackNonPlayerEntities) {
-            final Player player = (Player) hitEntity;
-
-            debug("You were hit by a fishing rod!", player);
-
-            if (player.equals(rodder))
-                return;
-
-            if (player.getGameMode() == GameMode.CREATIVE)
-                return;
-        }
+        if (hitEntity.equals(rodder)) return;
+        if (hitEntity instanceof Player && ((Player) hitEntity).getGameMode() == GameMode.CREATIVE) return;
 
         // Check if cooldown time has elapsed
         if (livingEntity.getNoDamageTicks() > livingEntity.getMaximumNoDamageTicks() / 2f)
@@ -100,46 +91,109 @@ public class ModuleFishingKnockback extends OCMModule {
         if (damage < 0)
             damage = 0.0001;
 
-        final RodDamageAttempt attempt = new RodDamageAttempt(rodder, livingEntity);
-        damageAttempts.push(attempt);
-        try {
-            livingEntity.damage(damage, rodder);
-        } finally {
-            damageAttempts.pop();
-        }
-        // Damage can be rejected by another plugin or by the server before an event is raised.
-        // Zero final damage alone is not rejection: resistance and absorption can absorb a valid hit.
-        if (attempt.event == null || attempt.event.isCancelled()) return;
-        livingEntity.setVelocity(
-                calculateKnockbackVelocity(livingEntity.getVelocity(), livingEntity.getLocation(), hook.getLocation()));
+        final Vector velocity = livingEntity.getVelocity().clone();
+        final Location victimLocation = livingEntity.getLocation();
+        final Location rodderLocation = rodder.getLocation();
+        final CombatDamageProvenance.RodAttempt attempt =
+                CombatDamageProvenance.damageRod(rodder, livingEntity, damage);
+        // Read final cancellation after all listeners, including nested damage, have returned.
+        if (attempt.getEvent() == null || attempt.getEvent().isCancelled()) return;
+        livingEntity.setVelocity(calculateKnockbackVelocity(velocity, victimLocation, rodderLocation));
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void observeRodDamage(EntityDamageByEntityEvent event) {
-        final RodDamageAttempt attempt = damageAttempts.peek();
-        if (attempt == null || !event.getEntity().getUniqueId().equals(attempt.victim.getUniqueId())
-                || !event.getDamager().getUniqueId().equals(attempt.rodder.getUniqueId())) return;
-        // Nested damage completes first; the enclosing rod event then replaces this reference.
-        // Read cancellation after damage() returns, including later listeners at this priority.
-        attempt.event = event;
-    }
-
-    private static final class RodDamageAttempt {
-        private final Player rodder;
-        private final LivingEntity victim;
-        private EntityDamageByEntityEvent event;
-
-        private RodDamageAttempt(Player rodder, LivingEntity victim) {
-            this.rodder = rodder;
-            this.victim = victim;
-        }
+        CombatDamageProvenance.claimRod(event);
     }
 
     private Entity findNearbyHitEntity(Entity hookEntity) {
-        return hookEntity.getWorld().getNearbyEntities(hookEntity.getLocation(), 0.25, 0.25, 0.25).stream()
-                .filter(entity -> knockbackNonPlayerEntities || entity instanceof Player)
-                .findFirst()
-                .orElse(null);
+        if (!legacyHitAccessChecked) {
+            legacyHitAccessChecked = true;
+            try {
+                legacyHitAccess = new LegacyHitAccess(hookEntity);
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                plugin.getLogger().warning("Legacy fishing collision access is unavailable; unattributed hits retain native behaviour.");
+            }
+        }
+        if (legacyHitAccess == null) return null;
+        try {
+            final Entity target = legacyHitAccess.findTarget((FishHook) hookEntity);
+            if (!(target instanceof LivingEntity) || target.hasMetadata("NPC")) return null;
+            if (!knockbackNonPlayerEntities && !(target instanceof Player)) return null;
+            if (target instanceof Player && ((Player) target).getGameMode() == GameMode.CREATIVE) return null;
+            return target;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            plugin.getLogger().warning("Could not resolve a legacy fishing collision; retaining native behaviour.");
+            return null;
+        }
+    }
+
+    /**
+     * Old ProjectileHitEvent has no target, and 1.9 EntityFishingHook emits it before
+     * advancing its position or assigning hooked. Resolve the native motion segment,
+     * clipped by blocks, using the server's own bounds and intersection primitives.
+     */
+    private static final class LegacyHitAccess {
+        private final Method entityHandle, worldHandle, boundingBox, interactable, rayTrace, expand, intersect, distance;
+        private final Constructor<?> vectorConstructor;
+        private final Field hitPosition;
+        private final Field vectorX, vectorY, vectorZ;
+
+        private LegacyHitAccess(Entity hook) throws ReflectiveOperationException {
+            final Class<?> craftEntity = Class.forName(hook.getClass().getPackage().getName() + ".CraftEntity");
+            entityHandle = Reflector.getMethod(craftEntity, "getHandle");
+            worldHandle = Reflector.getMethod(hook.getWorld().getClass(), "getHandle");
+            final Class<?> nativeEntity = entityHandle.getReturnType();
+            boundingBox = Reflector.getMethod(nativeEntity, "getBoundingBox");
+            interactable = Reflector.getMethod(nativeEntity, "isInteractable");
+            final Class<?> vector = Class.forName(nativeEntity.getPackage().getName() + ".Vec3D");
+            vectorConstructor = vector.getConstructor(double.class, double.class, double.class);
+            rayTrace = Reflector.getMethod(worldHandle.getReturnType(), "rayTrace", "Vec3D", "Vec3D");
+            expand = Reflector.getMethod(boundingBox.getReturnType(), "g", "double");
+            intersect = Reflector.getMethod(boundingBox.getReturnType(), "a", "Vec3D", "Vec3D");
+            distance = Reflector.getMethod(vector, "distanceSquared", "Vec3D");
+            hitPosition = Reflector.getField(rayTrace.getReturnType(), "pos");
+            vectorX = Reflector.getField(vector, "x");
+            vectorY = Reflector.getField(vector, "y");
+            vectorZ = Reflector.getField(vector, "z");
+            if (interactable == null || expand == null || intersect == null || distance == null)
+                throw new NoSuchMethodException("Legacy fishing intersection primitives");
+        }
+
+        private Entity findTarget(FishHook hook) throws ReflectiveOperationException {
+            final Location origin = hook.getLocation();
+            final Vector motion = hook.getVelocity();
+            final Object start = vectorConstructor.newInstance(origin.getX(), origin.getY(), origin.getZ());
+            Object end = vectorConstructor.newInstance(origin.getX() + motion.getX(),
+                    origin.getY() + motion.getY(), origin.getZ() + motion.getZ());
+            final Object blockHit = rayTrace.invoke(worldHandle.invoke(hook.getWorld()), start, end);
+            if (blockHit != null) end = hitPosition.get(blockHit);
+            final double dx = vectorX.getDouble(end) - origin.getX();
+            final double dy = vectorY.getDouble(end) - origin.getY();
+            final double dz = vectorZ.getDouble(end) - origin.getZ();
+            final Location centre = origin.clone().add(dx / 2, dy / 2, dz / 2);
+            double nearest = Double.POSITIVE_INFINITY;
+            Entity target = null;
+            for (Entity candidate : hook.getWorld().getNearbyEntities(centre,
+                    Math.abs(dx) / 2 + 1, Math.abs(dy) / 2 + 1, Math.abs(dz) / 2 + 1)) {
+                if (candidate.equals(hook)) continue;
+                if (candidate.equals(hook.getShooter()) && hook.getTicksLived() < 5) continue;
+                final Object handle = entityHandle.invoke(candidate);
+                if (!(Boolean) interactable.invoke(handle)) continue;
+                // Native 1.9 hook collision expands target bounds by 0.3 blocks.
+                final Object bounds = expand.invoke(boundingBox.invoke(handle), (double) 0.3F);
+                final Object hit = intersect.invoke(bounds, start, end);
+                if (hit == null) continue;
+                final double squared = (Double) distance.invoke(start, hitPosition.get(hit));
+                if (squared < nearest) {
+                    nearest = squared;
+                    target = candidate;
+                }
+            }
+            // Determine the actual first hit before applying eligibility, so an excluded
+            // target cannot cause a second entity behind it to receive the rod damage.
+            return target;
+        }
     }
 
     private Vector calculateKnockbackVelocity(Vector currentVelocity, Location player, Location hook) {

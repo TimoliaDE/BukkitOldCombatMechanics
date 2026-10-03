@@ -7,6 +7,7 @@ package kernitus.plugin.OldCombatMechanics.module;
 
 import com.cryptomorin.xseries.XAttribute;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance;
 import kernitus.plugin.OldCombatMechanics.utilities.CompatibilityCapabilities;
 import kernitus.plugin.OldCombatMechanics.utilities.compatibility.MythicMobsKnockbackBridge;
 import org.bukkit.Bukkit;
@@ -137,6 +138,7 @@ public class ModulePlayerKnockback extends OCMModule {
     // change event
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamageEntity(EntityDamageByEntityEvent event) {
+        if (CombatDamageProvenance.isRod(event)) return;
         final Entity damager = event.getDamager();
         if (!(damager instanceof LivingEntity))
             return;

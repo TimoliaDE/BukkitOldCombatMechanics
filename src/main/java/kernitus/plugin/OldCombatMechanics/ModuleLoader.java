@@ -40,6 +40,7 @@ public class ModuleLoader {
         // Re-enabling one alone would append it after its consumers. Refresh this group
         // only when membership changes, leaving ordinary reloads and other modules alone.
         final Set<String> damagePipeline = new HashSet<>(Arrays.asList(
+                "old-fishing-knockback", "projectile-knockback",
                 "entity-damage-listener", "shield-damage-reduction", "old-armour-strength"));
         final boolean pipelineChanged = modules.stream()
                 .filter(module -> damagePipeline.contains(module.getConfigName()))
@@ -48,7 +49,14 @@ public class ModuleLoader {
             modules.stream().filter(module -> damagePipeline.contains(module.getConfigName()))
                     .forEach(eventRegistry::unregisterListener);
         }
-        modules.forEach(module -> setState(module, module.isEnabled()));
+        // Claim rod provenance and inject projectile chip before LOWEST blocking on both
+        // initial enable and reload. Preserve the existing order of the other consumers.
+        modules.stream().filter(module -> module.getConfigName().equals("old-fishing-knockback")
+                        || module.getConfigName().equals("projectile-knockback"))
+                .forEach(module -> setState(module, module.isEnabled()));
+        modules.stream().filter(module -> !module.getConfigName().equals("old-fishing-knockback")
+                        && !module.getConfigName().equals("projectile-knockback"))
+                .forEach(module -> setState(module, module.isEnabled()));
     }
 
     private static void setState(OCMModule module, boolean state) {

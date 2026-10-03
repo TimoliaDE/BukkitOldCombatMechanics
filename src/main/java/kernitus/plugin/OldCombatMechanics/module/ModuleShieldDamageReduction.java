@@ -6,6 +6,7 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance;
 import kernitus.plugin.OldCombatMechanics.utilities.damage.BlockingDamageRecalculation;
 import kernitus.plugin.OldCombatMechanics.utilities.damage.DamageTypeTags;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
@@ -102,7 +103,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
         final double baseDamage = e.getDamage(DamageModifier.BASE) + e.getDamage(DamageModifier.HARD_HAT);
         if (!shieldBlockedDamage(baseDamage, e.getDamage(DamageModifier.BLOCKING))) return;
 
-        final double damageReduction = getDamageReduction(baseDamage, DamageTypeTags.from(e).matches("is_projectile", e.getCause() == DamageCause.PROJECTILE));
+        final double damageReduction = CombatDamageProvenance.isUnchangedChip(e, baseDamage) ? 0 : getDamageReduction(baseDamage, DamageTypeTags.from(e).matches("is_projectile", e.getCause() == DamageCause.PROJECTILE));
         if (!BlockingDamageRecalculation.replaceBlocking(e, -damageReduction)) {
             if (!warnedRecalculationUnavailable) {
                 warnedRecalculationUnavailable = true;
@@ -169,6 +170,7 @@ public class ModuleShieldDamageReduction extends OCMModule {
     }
 
     private double getDamageReduction(double damage, boolean projectile) {
+        if (damage <= 0) return 0;
         // 1.8 NMS code, where f is damage done, to calculate new damage.
         // f = (1.0F + f) * 0.5F;
 
@@ -178,17 +180,14 @@ public class ModuleShieldDamageReduction extends OCMModule {
         // Reduce to percentage
         reduction *= (projectile ? projectileDamageReductionPercentage : genericDamageReductionPercentage) / 100.0;
 
-        // Don't reduce by more than the actual damage done
-        // As far as I can tell this is not checked in 1.8NMS, and if the damage was low enough
-        // blocking would lead to higher damage. However, this is hardly the desired result.
-        if (reduction < 0) reduction = 0;
+        // EntityPlayer.damageEntity in MCP 1.8.9 applies (damage + 1) / 2 to positive hits.
+        // The resulting reduction is signed: small positive hits become larger.
 
         return reduction;
     }
 
     private boolean shieldBlockedDamage(double attackDamage, double blockingReduction) {
-        // Only reduce damage if they were hit head on, i.e. the shield blocked some of the damage
-        // This also takes into account damages that are not blocked by shields
+        // The native reduction establishes that this source actually met the shield.
         return attackDamage > 0 && blockingReduction < 0;
     }
 }

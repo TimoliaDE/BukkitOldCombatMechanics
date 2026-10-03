@@ -6,6 +6,7 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -705,6 +706,7 @@ public class ModuleSwordBlocking extends OCMModule {
      * @return reduction amount to subtract from damage, or 0 if not blocking/unsupported.
      */
     public double applyPaperBlockingReduction(org.bukkit.event.entity.EntityDamageByEntityEvent event, double incomingDamage) {
+        if (incomingDamage <= 0 || CombatDamageProvenance.isUnchangedChip(event, incomingDamage)) return 0;
         if (!paperSupported || paperAdapter == null) return 0;
         if (!(event.getEntity() instanceof Player)) return 0;
         final Player player = (Player) event.getEntity();
@@ -716,7 +718,6 @@ public class ModuleSwordBlocking extends OCMModule {
         final int amount = plugin.getConfig().getInt("shield-damage-reduction.generalDamageReductionAmount", 1);
         final int percent = plugin.getConfig().getInt("shield-damage-reduction.generalDamageReductionPercentage", 50);
         double reduction = (incomingDamage - amount) * (percent / 100.0);
-        if (reduction < 0) reduction = 0;
         if (reduction > incomingDamage) reduction = incomingDamage;
         return reduction;
     }

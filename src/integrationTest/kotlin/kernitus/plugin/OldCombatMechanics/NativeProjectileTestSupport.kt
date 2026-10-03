@@ -128,3 +128,31 @@ internal suspend fun <T : Projectile> recordNativeFlight(
             continuation.resumeWithException(error)
         }
     }
+
+/** Remove hooks through their native lifecycle so legacy owners release the active rod. */
+internal fun removeNativeTestProjectile(entity: org.bukkit.entity.Entity) {
+    if (entity is org.bukkit.entity.FishHook) {
+        val handle = entity.javaClass.getMethod("getHandle").invoke(entity)
+        val die = handle.javaClass.methods.firstOrNull { it.name == "die" && it.parameterCount == 0 }
+        if (die != null) {
+            die.invoke(handle)
+            return
+        }
+    }
+    entity.remove()
+}
+
+/** Constructed collision coverage on APIs which did not yet include a hit-entity argument. */
+internal fun constructedHookHit(
+    hook: org.bukkit.entity.FishHook,
+    target: org.bukkit.entity.Entity,
+): org.bukkit.event.entity.ProjectileHitEvent =
+    try {
+        org.bukkit.event.entity
+            .ProjectileHitEvent(hook, target)
+    } catch (_: NoSuchMethodError) {
+        hook.teleport(target.location.clone().add(0.0, 0.5, -1.0))
+        hook.velocity = Vector(0.0, 0.0, 2.0)
+        org.bukkit.event.entity
+            .ProjectileHitEvent(hook)
+    }

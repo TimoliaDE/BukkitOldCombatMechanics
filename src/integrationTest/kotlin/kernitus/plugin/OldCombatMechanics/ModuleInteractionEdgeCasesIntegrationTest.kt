@@ -88,6 +88,23 @@ class ModuleInteractionEdgeCasesIntegrationTest :
         val knockback = modules.filterIsInstance<ModulePlayerKnockback>().single()
         val durability = modules.filterIsInstance<ModuleOldArmourDurability>().single()
 
+        val ground = mutableMapOf<org.bukkit.block.Block, Material>()
+
+        fun preventFalling(entity: Cow) {
+            try {
+                entity.setGravity(false)
+            } catch (_: NoSuchMethodError) {
+                val location = entity.location
+                for (x in location.blockX - 1..location.blockX + 1) {
+                    for (z in location.blockZ - 1..location.blockZ + 1) {
+                        val block = entity.world.getBlockAt(x, location.blockY - 1, z)
+                        ground.putIfAbsent(block, block.type)
+                        block.type = Material.STONE
+                    }
+                }
+            }
+        }
+
         fun runSync(action: () -> Unit) {
             if (Bukkit.isPrimaryThread()) {
                 action()
@@ -199,6 +216,13 @@ class ModuleInteractionEdgeCasesIntegrationTest :
                     setAbsorptionAmount(it, 0.0)
                     it.health = it.maxHealth
                 }
+            }
+        }
+
+        afterTest {
+            runSync {
+                ground.forEach { (block, material) -> block.type = material }
+                ground.clear()
             }
         }
 
@@ -320,7 +344,20 @@ class ModuleInteractionEdgeCasesIntegrationTest :
                 victim.noDamageTicks = 0
                 val after = blockedHit()
                 Bukkit.getPluginManager().callEvent(after)
-                after.finalDamage shouldBe (7.5 plusOrMinus 0.0001)
+                val modifiers =
+                    DamageModifier
+                        .values()
+                        .filter {
+                            after.isApplicable(
+                                it,
+                            )
+                        }.associateWith { after.getDamage(it) }
+                withClue(
+                    "reload modifiers=$modifiers; cancelled=${after.isCancelled}; " +
+                        "effects=${victim.activePotionEffects}; config=${shield.module().getValues(false)}",
+                ) {
+                    after.finalDamage shouldBe (7.5 plusOrMinus 0.0001)
+                }
                 calls shouldBe 2
             } finally {
                 HandlerList.unregisterAll(listener)
@@ -333,8 +370,8 @@ class ModuleInteractionEdgeCasesIntegrationTest :
             val source = victim.world.spawn(Location(victim.world, 15.0, 100.0, 0.0), Cow::class.java)
             target.setAI(false)
             source.setAI(false)
-            target.setGravity(false)
-            source.setGravity(false)
+            preventFalling(target)
+            preventFalling(source)
             var cancelHit = false
             var cancellations = 0
             val listener =
@@ -379,8 +416,8 @@ class ModuleInteractionEdgeCasesIntegrationTest :
             val source = victim.world.spawn(Location(victim.world, 15.0, 100.0, 0.0), Cow::class.java)
             target.setAI(false)
             source.setAI(false)
-            target.setGravity(false)
-            source.setGravity(false)
+            preventFalling(target)
+            preventFalling(source)
             var replaceHit = false
             var nested = false
             val listener =
@@ -534,18 +571,19 @@ class ModuleInteractionEdgeCasesIntegrationTest :
                     }
                 }
             Bukkit.getPluginManager().registerEvents(listener, testPlugin)
-            val hook = attacker.launchProjectile(FishHook::class.java)
+            useProjectileItem(attacker, Material.FISHING_ROD)
+            val hook = nativeTestProjectiles(attacker).filterIsInstance<FishHook>().single()
             try {
                 victim.velocity = Vector()
                 val initialHealth = victim.health
-                Bukkit.getPluginManager().callEvent(ProjectileHitEvent(hook, victim))
+                Bukkit.getPluginManager().callEvent(constructedHookHit(hook, victim))
                 cancellations shouldBe 1
                 victim.health shouldBe (initialHealth plusOrMinus 0.0001)
                 withClue("cancelled damage count=$cancellations; health=$initialHealth; velocity=${victim.velocity}") {
                     victim.velocity.lengthSquared() shouldBe (0.0 plusOrMinus 0.0001)
                 }
             } finally {
-                hook.remove()
+                removeNativeTestProjectile(hook)
                 HandlerList.unregisterAll(listener)
             }
         }
@@ -568,16 +606,17 @@ class ModuleInteractionEdgeCasesIntegrationTest :
                         }
                     }
                 Bukkit.getPluginManager().registerEvents(listener, testPlugin)
-                val hook = attacker.launchProjectile(FishHook::class.java)
+                useProjectileItem(attacker, Material.FISHING_ROD)
+                val hook = nativeTestProjectiles(attacker).filterIsInstance<FishHook>().single()
                 try {
                     victim.velocity = Vector()
                     val initialHealth = victim.health
-                    Bukkit.getPluginManager().callEvent(ProjectileHitEvent(hook, victim))
+                    Bukkit.getPluginManager().callEvent(constructedHookHit(hook, victim))
                     accepted shouldBe 1
                     victim.velocity.y shouldBe (0.4 plusOrMinus 0.0001)
                     if (resistance) victim.health shouldBe (initialHealth plusOrMinus 0.0001)
                 } finally {
-                    hook.remove()
+                    removeNativeTestProjectile(hook)
                     HandlerList.unregisterAll(listener)
                 }
             }

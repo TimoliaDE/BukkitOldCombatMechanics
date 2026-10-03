@@ -27,7 +27,7 @@ This file holds always-on repository guidance and routing hints. Detailed workfl
 
 - Project: OldCombatMechanics, a Bukkit/Paper plugin.
 - Branch context: working from `kotlin-tests`.
-- Build tool: Gradle wrapper, currently 9.2.1.
+- Build tool: Gradle wrapper, currently 9.8.0.
 - JDKs used locally: 8, 11, 17, 25.
 - Main integration tests live in `src/integrationTest/kotlin` and are packaged into `OldCombatMechanics-<version>-tests.jar`.
 - Entrypoint test plugin class: `kernitus.plugin.OldCombatMechanics.OCMTestMain`.
@@ -66,6 +66,11 @@ This file holds always-on repository guidance and routing hints. Detailed workfl
 - Legacy vanilla jars for `<=1.12` are downloaded by `downloadVanilla<version>` into `run/<version>/cache/mojang_<version>.jar`.
 
 ## Core implementation constraints
+
+- Blocking reductions are signed for positive incoming damage: the legacy default maps 0.25 to 0.625. Zero remains zero. Only exact events attributed to OCM's default 0.0001 projectile or fishing injection avoid the half-point amplification; foreign equal-valued damage follows normal blocking. The exception also requires the current pre-block damage to retain the tiny injection value, so foreign Bukkit or offensive OCM adjustments receive normal blocking.
+- The ordered damage listener group registers fishing provenance and projectile chip injection before the damage, shield and armour consumers on initial enable and reload. Fishing claims its event at the expected Bukkit listener dispatch depth, excluding same-pair native damage nested by earlier LOWEST listeners, and clears the attempt in a finally block. Rod knockback uses the pre-damage velocity and rodder position, and only the attributed event bypasses melee knockback.
+- Legacy fishing target attribution clips the native motion segment at block collisions and selects the first intersecting native target before applying eligibility. Cached reflective access is confined to servers without hit-entity events. Native hook test cleanup calls the legacy removal lifecycle to release the owner's active hook.
+- Fishing mob knockback defaults to true when missing, while explicit false remains respected. Self, creative and NPC exclusions apply independently of that option; the unused hitCooldown setting has been removed.
 
 - `old-potion-throwing` independently restores player splash-potion launch geometry and Gaussian spread; lingering potions, witches and dispensers retain native launches. Position offsets use legacy Paper post-insertion events or detected modern section insertion before launch completes, avoiding chunk-boundary removal and section-update movement guards. Unsupported servers use a next-tick relative offset. Custom gravity uses one age-aware task and keeps native drag and tick order; the first native tick remains unchanged.
 - `fishing-rod-velocity.gravity` defaults to 0.04. The legacy 1.8 and 1.9 hook uses 0.04; the rewritten hook (already present in 1.12) uses 0.03, detected through its enum state machine. Custom gravity preserves native water handling.

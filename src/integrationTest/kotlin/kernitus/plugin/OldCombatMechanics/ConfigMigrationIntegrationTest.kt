@@ -67,6 +67,25 @@ class ConfigMigrationIntegrationTest :
             }
         }
 
+        for (explicit in listOf(false, true)) {
+            test("fishing mob migration preserves explicit false=$explicit") {
+                runSync {
+                    withConfigFile {
+                        val configFile = File(ocm.dataFolder, "config.yml")
+                        val oldConfig = YamlConfiguration.loadConfiguration(configFile)
+                        oldConfig.set("config-version", oldConfig.getInt("config-version") - 1)
+                        oldConfig.set("force-below-1-18-1-config-upgrade", true)
+                        oldConfig.set("old-fishing-knockback.knockbackNonPlayerEntities", if (explicit) false else null)
+                        oldConfig.set("old-fishing-knockback.hitCooldown", 1000)
+                        oldConfig.save(configFile)
+                        Config.reload()
+                        ocm.config.getBoolean("old-fishing-knockback.knockbackNonPlayerEntities") shouldBe !explicit
+                        ocm.config.contains("old-fishing-knockback.hitCooldown") shouldBe false
+                    }
+                }
+            }
+        }
+
         test("config upgrade migrates module buckets and preserves modesets") {
             runSync {
                 withConfigFile {

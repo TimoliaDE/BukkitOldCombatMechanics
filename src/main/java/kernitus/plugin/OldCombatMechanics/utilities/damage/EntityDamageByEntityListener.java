@@ -163,7 +163,19 @@ public class EntityDamageByEntityListener extends OCMModule {
             // Call event for the other modules to make their modifications
             plugin.getServer().getPluginManager().callEvent(e);
 
-            if (e.isCancelled()) return;
+            if (e.isCancelled()) {
+                // Projectiles bypass offensive reconstruction but still meet a raised Paper sword.
+                // Preserve explicit cancellation of ordinary living-attacker OCM events.
+                if (!(damager instanceof LivingEntity)) {
+                    final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
+                    if (swordBlocking != null) {
+                        final double reduction = swordBlocking.applyPaperBlockingReduction(
+                                (EntityDamageByEntityEvent) event, event.getDamage());
+                        if (reduction != 0) BlockingDamageRecalculation.replaceBlocking(event, -reduction);
+                    }
+                }
+                return;
+            }
 
             // Now we re-calculate damage modified by the modules and set it back to original event
             // Attack components order: (Base + Potion effects, scaled by attack delay) + Critical Hit + (Enchantments, scaled by attack delay)
@@ -229,11 +241,9 @@ public class EntityDamageByEntityListener extends OCMModule {
             double paperBlockReduction = 0;
             if (event instanceof EntityDamageByEntityEvent && swordBlocking != null) {
                 paperBlockReduction = swordBlocking.applyPaperBlockingReduction((EntityDamageByEntityEvent) event, newDamage);
-                if (paperBlockReduction > 0) {
+                if (paperBlockReduction != 0) {
                     final double preBlockDamage = newDamage;
                     newDamage = Math.max(0, newDamage - paperBlockReduction);
-                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BLOCKING, -paperBlockReduction);
-                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, preBlockDamage);
                     debug("Sword block (Paper): " + preBlockDamage + " - " + paperBlockReduction + " = " + newDamage, damager);
                 }
             }
@@ -251,10 +261,14 @@ public class EntityDamageByEntityListener extends OCMModule {
                 newDamage = 0;
             }
 
-            // Set damage; if we already populated modifiers for blocking, avoid overwriting BASE.
-            if (paperBlockReduction > 0 && event instanceof EntityDamageByEntityEvent) {
-                ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, newDamage + paperBlockReduction);
-                // BLOCKING was set earlier; total damage is BASE + BLOCKING (+ others)
+            // Recalculate the native defences once, after immunity. Calling setDamage again
+            // after replacing BLOCKING would reset the downstream native modifier functions.
+            if (paperBlockReduction != 0 && event instanceof EntityDamageByEntityEvent && !event.isCancelled()) {
+                final double baseDamage = Math.max(0, newDamage + paperBlockReduction);
+                event.setDamage(baseDamage);
+                if (!BlockingDamageRecalculation.replaceBlocking(event, newDamage - baseDamage)) {
+                    event.setDamage(newDamage);
+                }
             } else {
                 event.setDamage(newDamage);
             }

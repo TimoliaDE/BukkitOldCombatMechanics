@@ -186,6 +186,7 @@ object KotestRunner {
                             ModuleInteractionEdgeCasesIntegrationTest::class,
                             MixedModePvPIntegrationTest::class,
                             ProjectileKnockbackIntegrationTest::class,
+                            CombatFidelityBlockingFishingIntegrationTest::class,
                             PlayerKnockbackIntegrationTest::class,
                             AttackCooldownTrackerIntegrationTest::class,
                             AttackCooldownHeldItemIntegrationTest::class,
