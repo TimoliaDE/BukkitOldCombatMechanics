@@ -156,3 +156,29 @@ internal fun constructedHookHit(
         org.bukkit.event.entity
             .ProjectileHitEvent(hook)
     }
+
+/** Release the real active item after native player ticks have charged the bow. */
+internal fun releaseProjectileItem(player: Player) {
+    val handle = player.javaClass.getMethod("getHandle").invoke(player)
+    val release =
+        listOf("releaseUsingItem", "clearActiveItem", "eY").firstNotNullOfOrNull { name ->
+            kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector
+                .getMethod(handle.javaClass, name, 0)
+        } ?: error("No native active-item release method on ${handle.javaClass.name}")
+    val listener = object : Listener {}
+    Bukkit.getPluginManager().registerEvent(
+        ProjectileLaunchEvent::class.java,
+        listener,
+        EventPriority.MONITOR,
+        { _, event ->
+            val launch = event as ProjectileLaunchEvent
+            if (!launch.isCancelled && launch.entity.shooter == player) capturedProjectiles.add(launch.entity)
+        },
+        JavaPlugin.getPlugin(OCMTestMain::class.java),
+    )
+    try {
+        release.invoke(handle)
+    } finally {
+        HandlerList.unregisterAll(listener)
+    }
+}

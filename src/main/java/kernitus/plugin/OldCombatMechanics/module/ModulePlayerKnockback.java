@@ -8,6 +8,7 @@ package kernitus.plugin.OldCombatMechanics.module;
 import com.cryptomorin.xseries.XAttribute;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
 import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance;
+import kernitus.plugin.OldCombatMechanics.utilities.damage.ArrowKnockbackCompat;
 import kernitus.plugin.OldCombatMechanics.utilities.CompatibilityCapabilities;
 import kernitus.plugin.OldCombatMechanics.utilities.compatibility.MythicMobsKnockbackBridge;
 import org.bukkit.Bukkit;
@@ -66,10 +67,13 @@ public class ModulePlayerKnockback extends OCMModule {
         super(plugin, "old-player-knockback");
         mythicMobsKnockbackBridge = new MythicMobsKnockbackBridge(plugin);
         reload();
+        new ArrowKnockbackCompat(plugin, this);
     }
 
     @Override
     public void reload() {
+        pendingKnockback.clear();
+        stopCleanupTaskIfIdle();
         final Object configuredFriction = module().get("knockback-friction", 2.0);
         knockbackFriction = configuredFriction instanceof Number ? ((Number) configuredFriction).doubleValue() : Double.NaN;
         if (!Double.isFinite(knockbackFriction) || knockbackFriction <= 0) {
@@ -103,7 +107,15 @@ public class ModulePlayerKnockback extends OCMModule {
             stopCleanupTaskIfIdle();
             return;
         }
-        event.setVelocity(pending.velocity);
+        final Vector velocity = pending.velocity.clone();
+        if (pending.nativeVelocity != null) {
+            // Paper's immediate player-attack event carries its saved pre-hit vector;
+            // the tracker event instead carries the actual outgoing motion.
+            final Vector outgoing = ArrowKnockbackCompat.immediateMeleeVelocity()
+                    ? event.getPlayer().getVelocity() : event.getVelocity().clone();
+            velocity.add(outgoing.subtract(pending.nativeVelocity));
+        }
+        event.setVelocity(velocity);
         stopCleanupTaskIfIdle();
     }
 
@@ -230,6 +242,41 @@ public class ModulePlayerKnockback extends OCMModule {
         ensureCleanupTaskRunning();
     }
 
+    /** Reconcile a queued melee result with motion added after its final native stage. */
+    public Vector arrowInput(Player victim, Vector nativeVelocity) {
+        final PendingKnockback pending = pendingKnockback.get(victim.getUniqueId());
+        if (pending == null || pending.nativeVelocity == null) return nativeVelocity.clone();
+        return pending.velocity.clone().add(nativeVelocity.clone().subtract(pending.nativeVelocity));
+    }
+
+    /** Independently calculated legacy base; the native arrow retains ownership of Punch. */
+    public Vector arrowBase(Player victim, Entity shooter, Vector input) {
+        final Vector direction = shooter.getLocation().toVector().subtract(victim.getLocation().toVector()).setY(0);
+        if (direction.lengthSquared() < 1.0E-4) return null;
+        final Vector result = input.clone().multiply(1.0 / knockbackFriction)
+                .subtract(direction.normalize().multiply(knockbackHorizontal));
+        result.setY(Math.min(knockbackVerticalLimit, input.getY() / knockbackFriction + knockbackVertical));
+        if (netheriteKnockbackResistance) {
+            final AttributeInstance attribute = knockbackResistanceAttribute == null ? null : victim.getAttribute(knockbackResistanceAttribute);
+            if (attribute != null) result.multiply(new Vector(Math.max(0, 1 - attribute.getValue()), 1, Math.max(0, 1 - attribute.getValue())));
+        }
+        return result;
+    }
+
+    /** Final native event snapshots prevent a queued melee replacement from erasing later arrows. */
+    public void observeNativeKnockback(Player victim, Entity source, Vector outgoing, boolean arrow) {
+        final PendingKnockback pending = pendingKnockback.get(victim.getUniqueId());
+        if (pending == null) return;
+        if (arrow) {
+            // An accepted arrow has already transformed the reconciled melee input.
+            // Native Punch and subsequent foreign additions remain a delta at packet time.
+            pending.velocity = outgoing.clone();
+            pending.nativeVelocity = outgoing.clone();
+        } else if (pending.sourceId.equals(source.getUniqueId())) {
+            pending.nativeVelocity = outgoing.clone();
+        }
+    }
+
     private void ensureCleanupTaskRunning() {
         if (pendingCleanupTask != null) return;
         // Keep the clock across restarts: pending entries already use this time base.
@@ -262,7 +309,8 @@ public class ModulePlayerKnockback extends OCMModule {
     }
 
     private static final class PendingKnockback {
-        private final Vector velocity;
+        private Vector velocity;
+        private Vector nativeVelocity;
         private final UUID sourceId;
         private final long expiresAtTick;
 

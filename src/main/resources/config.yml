@@ -277,6 +277,11 @@ disable-sword-sweep-particles:
 
 old-player-knockback:
   # This is to change knockback players receive from attacks.  Default values are as in 1.8.
+  # Arrow base knockback uses these settings when a suitable Bukkit or Paper event exists.
+  # Native Punch remains separate. Servers without that event, including 1.9 and 1.12,
+  # retain native arrow knockback, including native airborne behaviour.
+  # Full native resistance can suppress the event on older Paper, so no base correction
+  # is possible there. Disabling resistance removes modifiers, not foreign base attributes.
   #
   # Practice servers tend to use lower knockback, for example:
   # knockback-horizontal: 0.35
