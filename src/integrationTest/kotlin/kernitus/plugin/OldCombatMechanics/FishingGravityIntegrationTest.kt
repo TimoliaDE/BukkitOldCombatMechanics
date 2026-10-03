@@ -124,69 +124,78 @@ class FishingGravityIntegrationTest :
                 module.reload()
             }
         }
-        test("real cast trackers stop after reload, removal, disable and external no-gravity") {
-            val previous = ocm.config.get("fishing-rod-velocity.gravity")
-            for (action in listOf("reload", "remove", "disable", "no-gravity")) {
-                val fake = FakePlayer(testPlugin)
-                var hook: FishHook? = null
-                try {
-                    ocm.config.set("fishing-rod-velocity.gravity", 0.1)
-                    module.reload()
-                    fake.spawn(Location(Bukkit.getWorld("world"), 8.0, 180.0, 8.0))
-                    val player = fake.requireBukkitPlayer()
-                    delay(100)
-                    useProjectileItem(player, Material.FISHING_ROD)
-                    hook =
-                        nativeTestProjectiles(player)
-                            .filterIsInstance<FishHook>()
-                            .single()
-                    (
+        for (noGravityOnly in listOf(false, true)) {
+            test("fishing lifecycle external-no-gravity=$noGravityOnly").config(
+                enabledOrReasonIf = {
+                    io.kotest.core.test.Enabled(
+                        !noGravityOnly || org.bukkit.entity.Entity::class.java.methods.any { it.name == "setGravity" },
+                        "External gravity control is absent from this Bukkit API",
+                    )
+                },
+            ) {
+                val previous = ocm.config.get("fishing-rod-velocity.gravity")
+                for (action in if (noGravityOnly) listOf("no-gravity") else listOf("reload", "remove", "disable")) {
+                    val fake = FakePlayer(testPlugin)
+                    var hook: FishHook? = null
+                    try {
+                        ocm.config.set("fishing-rod-velocity.gravity", 0.1)
+                        module.reload()
+                        fake.spawn(Location(Bukkit.getWorld("world"), 8.0, 180.0, 8.0))
+                        val player = fake.requireBukkitPlayer()
+                        delay(100)
+                        useProjectileItem(player, Material.FISHING_ROD)
+                        hook =
+                            nativeTestProjectiles(player)
+                                .filterIsInstance<FishHook>()
+                                .single()
+                        (
+                            module.javaClass
+                                .getDeclaredField(
+                                    "activeHooks",
+                                ).apply { isAccessible = true }
+                                .get(module) as Map<*, *>
+                        ).size shouldBe
+                            1
+                        when (action) {
+                            "reload" -> {
+                                module.reload()
+                            }
+
+                            "remove" -> {
+                                hook.remove()
+                            }
+
+                            "disable" -> {
+                                PlayerModuleOverrides.setOverride(
+                                    player,
+                                    "fishing-rod-velocity",
+                                    PlayerModuleOverride.FORCE_DISABLED,
+                                )
+                            }
+
+                            else -> {
+                                hook.setGravity(false)
+                            }
+                        }
+                        delay(150)
+                        (
+                            module.javaClass
+                                .getDeclaredField(
+                                    "activeHooks",
+                                ).apply { isAccessible = true }
+                                .get(module) as Map<*, *>
+                        ).size shouldBe
+                            0
                         module.javaClass
-                            .getDeclaredField(
-                                "activeHooks",
-                            ).apply { isAccessible = true }
-                            .get(module) as Map<*, *>
-                    ).size shouldBe
-                        1
-                    when (action) {
-                        "reload" -> {
-                            module.reload()
-                        }
-
-                        "remove" -> {
-                            hook.remove()
-                        }
-
-                        "disable" -> {
-                            PlayerModuleOverrides.setOverride(
-                                player,
-                                "fishing-rod-velocity",
-                                PlayerModuleOverride.FORCE_DISABLED,
-                            )
-                        }
-
-                        else -> {
-                            hook.setGravity(false)
-                        }
+                            .getDeclaredField("gravityTask")
+                            .apply { isAccessible = true }
+                            .get(module) shouldBe null
+                    } finally {
+                        hook?.remove()
+                        fake.removePlayer()
+                        ocm.config.set("fishing-rod-velocity.gravity", previous)
+                        module.reload()
                     }
-                    delay(150)
-                    (
-                        module.javaClass
-                            .getDeclaredField(
-                                "activeHooks",
-                            ).apply { isAccessible = true }
-                            .get(module) as Map<*, *>
-                    ).size shouldBe
-                        0
-                    module.javaClass
-                        .getDeclaredField("gravityTask")
-                        .apply { isAccessible = true }
-                        .get(module) shouldBe null
-                } finally {
-                    hook?.remove()
-                    fake.removePlayer()
-                    ocm.config.set("fishing-rod-velocity.gravity", previous)
-                    module.reload()
                 }
             }
         }

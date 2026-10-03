@@ -389,15 +389,25 @@ class OldPotionThrowingIntegrationTest :
                 }
             nativeTestProjectiles(player).forEach { it.remove() }
             setMode(player, "old")
-            val listener =
+            val insertion =
                 module.javaClass
-                    .getDeclaredField("additionListener")
+                    .getDeclaredField("insertion")
                     .apply { isAccessible = true }
-                    .get(module) as Listener
+                    .get(module)
+            val listener =
+                insertion.javaClass
+                    .getDeclaredField("additionListener")
+                    .apply {
+                        isAccessible = true
+                    }.get(insertion) as Listener
             HandlerList.unregisterAll(listener)
-            val insertionCapability = module.javaClass.getDeclaredField("modernInsertion").apply { isAccessible = true }
-            val detectedInsertion = insertionCapability.get(module)
-            insertionCapability.set(module, false)
+            val insertionCapability =
+                insertion.javaClass.getDeclaredField("modernInsertion").apply {
+                    isAccessible =
+                        true
+                }
+            val detectedInsertion = insertionCapability.get(insertion)
+            insertionCapability.set(insertion, false)
             try {
                 val eye = player.eyeLocation
                 val origin =
@@ -426,37 +436,71 @@ class OldPotionThrowingIntegrationTest :
                     .getDeclaredField("gravityTask")
                     .apply { isAccessible = true }
                     .get(module) shouldBe null
+                nativeTestProjectiles(player).forEach { it.remove() }
+                val cancelAfterOffset = object : Listener {}
+                Bukkit.getPluginManager().registerEvent(
+                    ProjectileLaunchEvent::class.java,
+                    cancelAfterOffset,
+                    EventPriority.HIGHEST,
+                    { _, event ->
+                        val launch = event as ProjectileLaunchEvent
+                        if (launch.entity.shooter == player) launch.isCancelled = true
+                    },
+                    testPlugin,
+                )
+                try {
+                    useProjectileItem(player, Material.SPLASH_POTION)
+                    delay(150)
+                    val pending = insertion.javaClass.getDeclaredField("pendingOffsets").apply { isAccessible = true }
+                    (pending.get(insertion) as Map<*, *>).isEmpty() shouldBe true
+                    insertion.javaClass
+                        .getDeclaredField("task")
+                        .apply { isAccessible = true }
+                        .get(insertion) shouldBe
+                        null
+                } finally {
+                    HandlerList.unregisterAll(cancelAfterOffset)
+                }
             } finally {
-                insertionCapability.set(module, detectedInsertion)
-                module.javaClass
+                insertionCapability.set(insertion, detectedInsertion)
+                insertion.javaClass
                     .getDeclaredMethod(
                         "registerAdditionListener",
                     ).apply { isAccessible = true }
-                    .invoke(module)
+                    .invoke(insertion)
             }
         }
 
-        test("gravity trackers stop after reload, modeset change, removal and external no-gravity") {
-            for (action in listOf("reload", "modeset", "remove", "no-gravity")) {
-                setMode(player, "old")
-                configure("gravity" to 0.1)
-                useProjectileItem(player, Material.SPLASH_POTION)
-                val potion =
-                    nativeTestProjectiles(player)
-                        .filterIsInstance<ThrownPotion>()
-                        .single()
-                tracked() shouldBe 1
-                when (action) {
-                    "reload" -> module.reload()
-                    "modeset" -> setMode(player, "new")
-                    "remove" -> potion.remove()
-                    else -> potion.setGravity(false)
+        for (noGravityOnly in listOf(false, true)) {
+            test("potion lifecycle external-no-gravity=$noGravityOnly").config(
+                enabledOrReasonIf = {
+                    io.kotest.core.test.Enabled(
+                        !noGravityOnly || org.bukkit.entity.Entity::class.java.methods.any { it.name == "setGravity" },
+                        "External gravity control is absent from this Bukkit API",
+                    )
+                },
+            ) {
+                for (action in if (noGravityOnly) listOf("no-gravity") else listOf("reload", "modeset", "remove")) {
+                    setMode(player, "old")
+                    configure("gravity" to 0.1)
+                    useProjectileItem(player, Material.SPLASH_POTION)
+                    val potion =
+                        nativeTestProjectiles(player)
+                            .filterIsInstance<ThrownPotion>()
+                            .single()
+                    tracked() shouldBe 1
+                    when (action) {
+                        "reload" -> module.reload()
+                        "modeset" -> setMode(player, "new")
+                        "remove" -> potion.remove()
+                        else -> potion.setGravity(false)
+                    }
+                    delay(150)
+                    tracked() shouldBe 0
+                    val taskField = module.javaClass.getDeclaredField("gravityTask").apply { isAccessible = true }
+                    taskField.get(module) shouldBe null
+                    potion.remove()
                 }
-                delay(150)
-                tracked() shouldBe 0
-                val taskField = module.javaClass.getDeclaredField("gravityTask").apply { isAccessible = true }
-                taskField.get(module) shouldBe null
-                potion.remove()
             }
         }
         test("invalid numeric values fall back to finite vanilla launch defaults") {
@@ -474,7 +518,8 @@ class OldPotionThrowingIntegrationTest :
                 nativeTestProjectiles(player)
                     .filterIsInstance<ThrownPotion>()
                     .single()
-            potion.velocity.checkFinite()
+            val velocity = potion.velocity
+            listOf(velocity.x, velocity.y, velocity.z).all { it.isFinite() } shouldBe true
             abs(
                 potion.location.x -
                     (player.eyeLocation.x - cos(Math.toRadians(player.eyeLocation.yaw.toDouble())) * 0.16),

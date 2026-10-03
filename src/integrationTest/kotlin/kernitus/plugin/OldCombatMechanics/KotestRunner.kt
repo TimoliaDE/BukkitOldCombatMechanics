@@ -196,6 +196,7 @@ object KotestRunner {
                             FishingRodVelocityIntegrationTest::class,
                             FishingGravityIntegrationTest::class,
                             OldPotionThrowingIntegrationTest::class,
+                            ProjectileLaunchFidelityIntegrationTest::class,
                             SwordSweepIntegrationTest::class,
                             PacketCancellationIntegrationTest::class,
                             EnderpearlCooldownIntegrationTest::class,

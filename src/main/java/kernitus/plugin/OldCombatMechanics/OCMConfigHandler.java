@@ -204,6 +204,14 @@ public class OCMConfigHandler {
                 if (oldDisabled.contains(moduleName) || oldAlways.contains(moduleName)) continue;
                 if (modulesInModesets.contains(moduleName)) continue;
             }
+            if (Arrays.asList("old-projectile-trajectory", "projectile-shoot-offset", "relative-projectile-velocity")
+                    .contains(moduleName)) {
+                if (hasLegacyToggles && oldAlways.contains(moduleName)) alwaysEnabled.add(moduleName);
+                if (hasLegacyToggles && oldDisabled.contains(moduleName)) disabledModules.add(moduleName);
+                if (!oldAlways.contains(moduleName) && !oldDisabled.contains(moduleName)
+                        && !modulesInModesets.contains(moduleName)) disabledModules.add(moduleName);
+                continue;
+            }
             if (potionThrowing.equals(moduleName) && !modulesInModesets.contains(moduleName)) {
                 disabledModules.add(moduleName);
                 continue;

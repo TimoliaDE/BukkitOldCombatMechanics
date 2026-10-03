@@ -264,4 +264,48 @@ class ConfigMigrationIntegrationTest :
                 }
             }
         }
+        test("version 75 upgrade disables unassigned launch modules and preserves explicit assignments") {
+            runSync {
+                for (legacyToggles in listOf(false, true)) {
+                    withConfigFile {
+                        val file = File(ocm.dataFolder, "config.yml")
+                        val old = YamlConfiguration.loadConfiguration(file)
+                        val currentVersion = old.getInt("config-version")
+                        val launchModules =
+                            listOf(
+                                "old-projectile-trajectory",
+                                "projectile-shoot-offset",
+                                "relative-projectile-velocity",
+                            )
+                        old.set("config-version", 75)
+                        old.set("force-below-1-18-1-config-upgrade", true)
+                        old.set(
+                            "disabled_modules",
+                            old.getStringList("disabled_modules").filterNot {
+                                it in
+                                    launchModules
+                            },
+                        )
+                        old.set(
+                            "always_enabled_modules",
+                            old.getStringList("always_enabled_modules") + launchModules[0],
+                        )
+                        old.set("modesets.old", old.getStringList("modesets.old") + launchModules[1])
+                        if (legacyToggles) {
+                            old.set("${launchModules[0]}.enabled", false)
+                            old.set("${launchModules[1]}.enabled", false)
+                            old.set("${launchModules[2]}.enabled", true)
+                        }
+                        old.save(file)
+                        Config.reload()
+                        ocm.config.getInt("config-version") shouldBe currentVersion
+                        ocm.config.getStringList("always_enabled_modules").shouldContain(launchModules[0])
+                        ocm.config.getStringList("modesets.old").shouldContain(launchModules[1])
+                        ocm.config.getStringList("disabled_modules").shouldContain(launchModules[2])
+                        ocm.config.getStringList("disabled_modules").shouldNotContain(launchModules[0])
+                        ocm.config.getStringList("disabled_modules").shouldNotContain(launchModules[1])
+                    }
+                }
+            }
+        }
     })

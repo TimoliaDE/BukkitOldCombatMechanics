@@ -34,6 +34,17 @@ disabled_modules:
   - "chorus-fruit"
   - "old-burn-delay"
   - "attack-range"
+  # Native main-hand player launches only: bows, eggs, snowballs, pearls, splash and experience bottles.
+  # Restores 1.8 Gaussian spread, direction and launch speed. Shooter movement stays native.
+  - "old-projectile-trajectory"
+  # Restores the standing and sneaking 1.8 origin with its 0.16-block sideways offset.
+  # Unsupported insertion hooks use a next-tick relative offset, approximating the first collision.
+  - "projectile-shoot-offset"
+  # Removes inherited shooter motion for each eligible launch without changing Paper world settings.
+  - "relative-projectile-velocity"
+  # The enabled old-potion-throwing module owns splash launches instead of all three generic modules.
+  # Missing native attribution leaves launches unchanged; missing movement access leaves velocity unchanged.
+  # Unsupported capabilities produce a diagnostic when these modules are enabled.
 
 modesets:
   # Modesets are lists of modules that are enabled for a player in that mode.
@@ -643,4 +654,4 @@ debug:
   enabled: false
 
 # DO NOT CHANGE THIS NUMBER AS IT WILL RESET YOUR CONFIG
-config-version: 75
+config-version: 76

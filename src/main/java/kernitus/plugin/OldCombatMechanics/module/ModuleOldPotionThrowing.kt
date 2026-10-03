@@ -7,20 +7,15 @@ package kernitus.plugin.OldCombatMechanics.module
 
 import kernitus.plugin.OldCombatMechanics.OCMMain
 import kernitus.plugin.OldCombatMechanics.utilities.ConfigUtils
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector
-import org.bukkit.Location
+import kernitus.plugin.OldCombatMechanics.utilities.projectile.ProjectileInsertion
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.entity.ThrownPotion
-import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
-import org.bukkit.event.HandlerList
-import org.bukkit.event.Listener
 import org.bukkit.event.entity.ProjectileLaunchEvent
 import org.bukkit.scheduler.BukkitTask
 import org.bukkit.util.Vector
-import java.lang.reflect.Method
 import java.util.Random
 import kotlin.math.abs
 import kotlin.math.cos
@@ -41,19 +36,12 @@ class ModuleOldPotionThrowing(
     private var hasGravityApi = true
     private val activePotions = mutableMapOf<ThrownPotion, Int>()
     private var gravityTask: BukkitTask? = null
-    private val pendingOffsets = mutableMapOf<ThrownPotion, Vector>()
-    private var modernInsertion: Boolean? = null
-    private var positionBridgeFailed = false
-    private var nativeHandle: Method? = null
-    private var nativeSetPosition: Method? = null
-    private val additionListener = object : Listener {}
+    private val insertion = ProjectileInsertion(plugin) { _, player -> isEnabled(player) }
 
     init {
         reload()
-        registerAdditionListener()
         plugin.addDisableListener {
             clearPotions()
-            HandlerList.unregisterAll(additionListener)
         }
     }
 
@@ -110,108 +98,15 @@ class ModuleOldPotionThrowing(
         // Legacy servers cache the destination chunk before this event. Moving across its boundary
         // here can make insertion kill the projectile. Apply the offset after insertion instead.
         val origin = eye.add(-cos(shooterYaw) * sidewaysOffset, verticalOffset, -sin(shooterYaw) * sidewaysOffset)
-        if (!positionBeforeModernInsertion(potion, origin)) {
-            pendingOffsets[potion] = origin.toVector().subtract(potion.location.toVector())
-        }
+        insertion.position(potion, origin)
         potion.velocity = velocity
         if (abs(gravity - 0.05) >= 1e-8) activePotions[potion] = potion.ticksLived
-        if (gravityTask == null && (pendingOffsets.isNotEmpty() || activePotions.isNotEmpty())) {
+        if (gravityTask == null && activePotions.isNotEmpty()) {
             gravityTask = plugin.server.scheduler.runTaskTimer(plugin, Runnable { adjustGravity() }, 1L, 1L)
         }
     }
 
-    private fun registerAdditionListener() {
-        try {
-            val eventType =
-                Class
-                    .forName(
-                        "com.destroystokyo.paper.event.entity.EntityAddToWorldEvent",
-                    ).asSubclass(Event::class.java)
-            val entityGetter = checkNotNull(Reflector.getMethod(eventType, "getEntity"))
-            plugin.server.pluginManager.registerEvent(
-                eventType,
-                additionListener,
-                EventPriority.MONITOR,
-                { _, event ->
-                    val potion = entityGetter.invoke(event) as? ThrownPotion
-                    if (potion != null && modernInsertion != true) applyPendingOffset(potion)
-                },
-                plugin,
-            )
-        } catch (_: ClassNotFoundException) {
-            // Spigot fallback: the shared task applies a relative offset on the next tick,
-            // preserving distance travelled and velocity rather than resetting the launch location.
-        }
-    }
-
-    private fun positionBeforeModernInsertion(
-        potion: ThrownPotion,
-        origin: Location,
-    ): Boolean {
-        if (positionBridgeFailed) return false
-        return try {
-            positionBeforeModernInsertionChecked(potion, origin)
-        } catch (failure: ReflectiveOperationException) {
-            positionBridgeFailed = true
-            modernInsertion = true // Avoid an unsafe post-add attempt if inspection failed.
-            plugin.logger.warning(
-                "Potion launch positioning is unavailable; using the next-tick offset: ${failure.message}",
-            )
-            false
-        }
-    }
-
-    private fun positionBeforeModernInsertionChecked(
-        potion: ThrownPotion,
-        origin: Location,
-    ): Boolean {
-        if (modernInsertion == null) {
-            nativeHandle = Reflector.getMethod(potion.javaClass, "getHandle")
-            val handle = nativeHandle?.invoke(potion)
-            var type: Class<*>? = handle?.javaClass
-            while (type != null && type.declaredFields.none { it.name == "updatingSectionStatus" }) {
-                type = type.superclass
-            }
-            // Paper's section-based insertion runs the launch event before selecting the section.
-            // Its post-add callback forbids movement, unlike the legacy chunk insertion callback.
-            modernInsertion = type != null
-            if (type != null) {
-                nativeSetPosition = Reflector.getMethod(type, "setPos", "double", "double", "double")
-            }
-        }
-        if (modernInsertion != true) return false
-        if (potion.teleport(origin) && potion.location.distanceSquared(origin) < 1e-12) return true
-        // Newer Paper rejects API teleport before validity is published. Move this same unborn
-        // entity through its normal native setter, before insertion has selected its section.
-        val setter = nativeSetPosition ?: return false
-        setter.invoke(nativeHandle?.invoke(potion), origin.x, origin.y, origin.z)
-        return potion.location.distanceSquared(origin) < 1e-12
-    }
-
-    private fun applyPendingOffset(potion: ThrownPotion) {
-        val offset = pendingOffsets[potion] ?: return
-        val shooter = potion.shooter as? Player
-        if (!potion.isValid || shooter == null || !isEnabled(shooter) || potion.ticksLived > 20) {
-            pendingOffsets.remove(potion)
-            return
-        }
-        // Remove temporarily because teleport can trigger another entity-added callback.
-        pendingOffsets.remove(potion)
-        val velocity = potion.velocity
-        val destination = potion.location.add(offset)
-        val moved = potion.teleport(destination)
-        if (moved) potion.velocity = velocity
-        if (!moved || potion.location.distanceSquared(destination) >= 1e-12) {
-            pendingOffsets[potion] = offset
-        }
-        if (pendingOffsets.isEmpty() && activePotions.isEmpty()) {
-            gravityTask?.cancel()
-            gravityTask = null
-        }
-    }
-
     private fun adjustGravity() {
-        pendingOffsets.keys.toList().forEach { applyPendingOffset(it) }
         val iterator = activePotions.entries.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
@@ -233,7 +128,7 @@ class ModuleOldPotionThrowing(
             velocity.y -= gravity - 0.05
             potion.velocity = velocity
         }
-        if (activePotions.isEmpty() && pendingOffsets.isEmpty()) clearPotions()
+        if (activePotions.isEmpty()) clearPotions()
     }
 
     private fun usesGravity(potion: ThrownPotion): Boolean {
@@ -251,6 +146,6 @@ class ModuleOldPotionThrowing(
         gravityTask?.cancel()
         gravityTask = null
         activePotions.clear()
-        pendingOffsets.clear()
+        insertion.clear()
     }
 }

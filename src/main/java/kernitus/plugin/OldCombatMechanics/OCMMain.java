@@ -285,7 +285,16 @@ public class OCMMain extends JavaPlugin {
         ModuleLoader.addModule(new ModuleOldBurnDelay(this));
         ModuleLoader.addModule(new ModuleAttackFrequency(this));
         ModuleLoader.addModule(new ModuleFishingRodVelocity(this));
-        ModuleLoader.addModule(new ModuleOldPotionThrowing(this));
+        final ModuleOldPotionThrowing potionThrowing = new ModuleOldPotionThrowing(this);
+        ModuleLoader.addModule(potionThrowing);
+        final ModuleOldProjectileTrajectory trajectory = new ModuleOldProjectileTrajectory(this);
+        final ModuleProjectileShootOffset shootOffset = new ModuleProjectileShootOffset(this);
+        final ModuleRelativeProjectileVelocity relativeVelocity = new ModuleRelativeProjectileVelocity(this);
+        ModuleLoader.addModule(trajectory);
+        ModuleLoader.addModule(shootOffset);
+        ModuleLoader.addModule(relativeVelocity);
+        new kernitus.plugin.OldCombatMechanics.utilities.projectile.ProjectileLaunchCoordinator(
+                this, trajectory, shootOffset, relativeVelocity, potionThrowing);
 
         ModuleLoader.addModule(new ModuleAttackSounds(this));
         ModuleLoader.addModule(new ModuleSwordSweepParticles(this));

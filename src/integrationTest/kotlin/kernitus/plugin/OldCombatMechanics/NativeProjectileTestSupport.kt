@@ -29,16 +29,19 @@ internal fun nativeTestProjectiles(player: Player): List<Projectile> =
 internal fun useProjectileItem(
     player: Player,
     material: Material,
+    offHand: Boolean = false,
     prepare: (ItemStack) -> Unit = {},
 ) {
     val item = ItemStack(material, 16)
     prepare(item)
-    player.inventory.setItemInMainHand(item)
+    if (offHand) player.inventory.setItemInOffHand(item) else player.inventory.setItemInMainHand(item)
     val craftPackage =
         player.javaClass.`package`.name
             .substringBeforeLast(".entity")
     val craftItem = Class.forName("$craftPackage.inventory.CraftItemStack")
-    val stack = craftItem.getMethod("asNMSCopy", ItemStack::class.java).invoke(null, player.inventory.itemInMainHand)
+    val held = if (offHand) player.inventory.itemInOffHand else player.inventory.itemInMainHand
+    check(craftItem.isInstance(held)) { "Native use requires the actual CraftItemStack inventory mirror" }
+    val stack = craftItem.getDeclaredField("handle").apply { isAccessible = true }.get(held)
     val handle = player.javaClass.getMethod("getHandle").invoke(player)
     val world =
         player.world.javaClass
@@ -50,7 +53,7 @@ internal fun useProjectileItem(
             types.size == 3 && types[0].isInstance(world) && types[1].isInstance(handle) &&
                 types[2].isEnum && types[2].enumConstants.size == 2 && method.returnType != Void.TYPE
         }
-    val hand = use.parameterTypes[2].enumConstants.first()
+    val hand = use.parameterTypes[2].enumConstants[if (offHand) 1 else 0]
     capturedProjectiles.removeAll { it.isDead }
     val listener = object : Listener {}
     Bukkit.getPluginManager().registerEvent(
