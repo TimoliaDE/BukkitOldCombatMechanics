@@ -191,6 +191,7 @@ object KotestRunner {
                             AttackCooldownTrackerIntegrationTest::class,
                             AttackCooldownHeldItemIntegrationTest::class,
                             PlayerRegenIntegrationTest::class,
+                            NativeRegenerationIntegrationTest::class,
                             FishingRodVelocityIntegrationTest::class,
                             FishingGravityIntegrationTest::class,
                             OldPotionThrowingIntegrationTest::class,

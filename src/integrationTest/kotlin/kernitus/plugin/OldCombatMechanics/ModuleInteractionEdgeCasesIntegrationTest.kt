@@ -15,7 +15,6 @@ import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.module.ModuleOldArmourDurability
 import kernitus.plugin.OldCombatMechanics.module.ModuleOldArmourStrength
 import kernitus.plugin.OldCombatMechanics.module.ModulePlayerKnockback
-import kernitus.plugin.OldCombatMechanics.module.ModulePlayerRegen
 import kernitus.plugin.OldCombatMechanics.module.ModuleShieldDamageReduction
 import kernitus.plugin.OldCombatMechanics.utilities.Config
 import kernitus.plugin.OldCombatMechanics.utilities.potions.PotionEffects
@@ -623,21 +622,24 @@ class ModuleInteractionEdgeCasesIntegrationTest :
         }
 
         test("regen exhaustion correction preserves an intervening plugin cost") {
-            configure("old-player-regen")
-            ocm.config.set("old-player-regen.exhaustion", 1.0)
-            ocm.config.set("old-player-regen.interval", 0)
-            modules.filterIsInstance<ModulePlayerRegen>().single().reload()
-            victim.health = 10.0
-            victim.exhaustion = 0.5f
-            Bukkit.getPluginManager().callEvent(
-                EntityRegainHealthEvent(victim, 1.0, EntityRegainHealthEvent.RegainReason.SATIATED),
-            )
-            applyTestExhaustion(victim, 6.0)
-            // Model a stamina plugin charging 0.75 exhaustion after OCM handles regeneration.
-            victim.exhaustion += 0.75f
-            ticks(1)
-            withClue("exhaustion: expected=2.25 (0.5 + regen 1.0 + plugin 0.75), actual=${victim.exhaustion}") {
-                victim.exhaustion.toDouble() shouldBe (2.25 plusOrMinus 0.0001)
+            // Use native food processing: constructed SATIATED events have no native charge,
+            // and the old airborne victim fixture could consume exhaustion before correction.
+            val fixture = RegenerationFixture()
+            try {
+                fixture.start(250, 2.0, 1.0)
+                fixture.player.health = 10.0
+                fixture.player.exhaustion = 0.5f
+                fixture.edit = { fixture.player.exhaustion += 0.75f }
+                fixture.ticks(7)
+                fixture.heals.size shouldBe 1
+                fixture.player.health shouldBe (12.0 plusOrMinus 0.0001)
+                withClue(
+                    "exhaustion: expected=2.25 (0.5 + regen 1.0 + plugin 0.75), actual=${fixture.player.exhaustion}",
+                ) {
+                    fixture.player.exhaustion.toDouble() shouldBe (2.25 plusOrMinus 0.0001)
+                }
+            } finally {
+                fixture.close()
             }
         }
     })

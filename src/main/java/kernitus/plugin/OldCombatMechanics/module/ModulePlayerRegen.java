@@ -7,124 +7,134 @@ package kernitus.plugin.OldCombatMechanics.module;
 
 import com.cryptomorin.xseries.XAttribute;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import kernitus.plugin.OldCombatMechanics.utilities.MathsHelper;
+import kernitus.plugin.OldCombatMechanics.utilities.regen.LegacyRegenerationTracker;
+import kernitus.plugin.OldCombatMechanics.utilities.regen.RegenerationRateCompat;
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityExhaustionEvent;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
-import java.lang.reflect.Method;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityExhaustionEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.lang.reflect.Method;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Establishes custom health regeneration rules.
- * Default values based on 1.8 from
- * <a href="https://minecraft.gamepedia.com/Hunger?oldid=948685">wiki</a>
- */
+/** Native rates where available, with an independently timed legacy fallback. */
 public class ModulePlayerRegen extends OCMModule {
-
-    // Vanilla 1.8 natural regen is driven by ticks (foodTickTimer reaches 80 ticks), not wall-clock time.
-    // We therefore measure "interval" in ticks so behaviour stays consistent with TPS drops, rather than
-    // speeding up/slowing down based on real time.
-    //
-    // Performance/correctness:
-    // - Use a normal HashMap (WeakHashMap<UUID, ...> can drop entries unpredictably).
-    // - Keep a single shared tick counter task that runs only while we are tracking at least one player, rather
-    //   than any per-player repeating tasks.
-    private final Map<UUID, Long> lastHealTick = new HashMap<>();
-    private BukkitTask tickTask;
-    private long tickCounter;
-    private long intervalTicks;
-    private int healAmount;
-    private float exhaustionToApply;
+    private final RegenerationRateCompat rates = new RegenerationRateCompat();
+    private final LegacyRegenerationTracker tracker = new LegacyRegenerationTracker();
+    private final Map<UUID, Player> legacyPlayers = new HashMap<>();
     private final Map<UUID, Deque<RegenCharge>> pendingCharges = new HashMap<>();
     private final boolean exhaustionEventAvailable;
     private static final Method FAST_REGEN = Reflector.getMethod(EntityRegainHealthEvent.class, "isFastRegen");
+    private BukkitTask tickTask;
+    private int intervalTicks;
+    private double healAmount;
+    private float exhaustionToApply;
+    private EntityRegainHealthEvent ownedHeal;
 
     public ModulePlayerRegen(OCMMain plugin) {
         super(plugin, "old-player-regen");
         exhaustionEventAvailable = hasExhaustionEvent();
-        if (exhaustionEventAvailable) {
-            // Isolate the optional event type in a nested listener for legacy class loading.
-            Bukkit.getPluginManager().registerEvents(new ExhaustionListener(), plugin);
-        }
+        if (exhaustionEventAvailable) Bukkit.getPluginManager().registerEvents(new ExhaustionListener(), plugin);
+        // This callback survives Config.toggleModules unregistering the module listener.
+        plugin.addDisableListener(this::shutdown);
         reload();
     }
 
     @Override
     public void reload() {
-        final long intervalMillis = module().getLong("interval");
-        // Config is in milliseconds for user friendliness, but internal logic is tick based.
-        intervalTicks = Math.max(1L, Math.round(intervalMillis / 50.0));
-        healAmount = module().getInt("amount");
+        intervalTicks = (int) Math.min(Integer.MAX_VALUE, Math.max(1L, Math.round(module().getLong("interval") / 50.0)));
+        healAmount = module().getDouble("amount");
         exhaustionToApply = (float) module().getDouble("exhaustion");
+        for (Player player : Bukkit.getOnlinePlayers()) refresh(player);
+    }
 
-        if (tickTask != null && lastHealTick.isEmpty()) {
-            tickTask.cancel();
-            tickTask = null;
+    @Override
+    public void onModesetChange(Player player) {
+        refresh(player);
+    }
+
+    private void refresh(Player player) {
+        if (!isEnabled(player) || player.isDead()) {
+            release(player);
+        } else if (!rates.apply(player, intervalTicks)) {
+            legacyPlayers.put(player.getUniqueId(), player);
+            if (tickTask == null) tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onRegen(EntityRegainHealthEvent e) {
-        if (e.getEntityType() != EntityType.PLAYER
-                || e.getRegainReason() != EntityRegainHealthEvent.RegainReason.SATIATED)
-            return;
-
-        final Player p = (Player) e.getEntity();
-        if (!isEnabled(p))
-            return;
-
-        final UUID playerId = p.getUniqueId();
-
-        // Replace the heal and its exhaustion charge independently.
-        e.setCancelled(true);
-
-        // Get exhaustion & saturation values before healing modifies them
-        final float previousExhaustion = p.getExhaustion();
-        final float previousSaturation = p.getSaturation();
-
-        ensureTickTaskRunning();
-
-        // Check that it has been at least x ticks since last heal
-        final long currentTick = tickCounter;
-        final Long lastTick = lastHealTick.get(playerId);
-        debug("Exh: " + previousExhaustion + " Sat: " + previousSaturation + " Ticks since: " +
-                        (lastTick == null ? "?" : (currentTick - lastTick)),
-                p);
-
-        if (lastTick != null && currentTick - lastTick < intervalTicks) {
-            replaceRegenerationCharge(p, e, 0);
-            return;
+    private void tick() {
+        for (Player player : new java.util.ArrayList<>(legacyPlayers.values())) {
+            if (!isEnabled(player) || player.isDead()) {
+                release(player);
+            } else if (tracker.tick(player, intervalTicks)) {
+                legacyHeal(player);
+            }
         }
-
-        final double maxHealth = p.getAttribute(XAttribute.MAX_HEALTH.get()).getValue();
-        final double playerHealth = p.getHealth();
-
-        if (playerHealth < maxHealth) {
-            p.setHealth(MathsHelper.clamp(playerHealth + healAmount, 0.0, maxHealth));
-            lastHealTick.put(playerId, currentTick);
-        }
-
-        replaceRegenerationCharge(p, e, exhaustionToApply);
     }
 
-    private void replaceRegenerationCharge(Player player, EntityRegainHealthEvent event, float amount) {
+    private void legacyHeal(Player player) {
+        final EntityRegainHealthEvent event = new EntityRegainHealthEvent(player, healAmount, EntityRegainHealthEvent.RegainReason.SATIATED);
+        final EntityRegainHealthEvent previous = ownedHeal;
+        ownedHeal = event;
+        try {
+            Bukkit.getPluginManager().callEvent(event);
+            if (!event.isCancelled() && !player.isDead() && isEnabled(player)) {
+                final double max = player.getAttribute(XAttribute.MAX_HEALTH.get()).getValue();
+                player.setHealth(Math.max(0, Math.min(max, player.getHealth() + event.getAmount())));
+                // 1.9.4 and 1.12 FoodMetaData.a(EntityHuman) charge FoodMetaData.a(float)
+                // directly, including creative players. Preserve that host-native route.
+                tracker.charge(player, exhaustionToApply);
+            }
+        } finally {
+            ownedHeal = previous;
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onRegen(EntityRegainHealthEvent event) {
+        if (!(event.getEntity() instanceof Player) || event == ownedHeal
+                || event.getRegainReason() != EntityRegainHealthEvent.RegainReason.SATIATED) return;
+        final Player player = (Player) event.getEntity();
+        if (!isEnabled(player)) return;
+        refresh(player);
+        // SATIATED is public API: another plugin's constructed event is not native food processing.
+        if (!nativeFoodEvent()) return;
+        final boolean legacy = legacyPlayers.containsKey(player.getUniqueId());
+        if (legacy) event.setCancelled(true);
+        else if (!event.isCancelled()) event.setAmount(healAmount);
+        replaceRegenerationCharge(player, event, legacy);
+    }
+
+    private static boolean nativeFoodEvent() {
+        // Verified native callers: 1.9/1.12 FoodMetaData.a(EntityHuman),
+        // 1.19.2 FoodData.tick(Player), and 1.21.11 FoodData.tick(ServerPlayer).
+        // This cold path runs only on a natural heal, not on every player tick.
+        int dispatches = 0;
+        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
+            if (frame.getClassName().equals("org.bukkit.plugin.RegisteredListener") && frame.getMethodName().equals("callEvent")) dispatches++;
+            if (frame.getClassName().endsWith(".FoodMetaData") || frame.getClassName().endsWith(".FoodData")) return dispatches == 1;
+        }
+        return false;
+    }
+
+    private void replaceRegenerationCharge(Player player, EntityRegainHealthEvent event, boolean suppressed) {
         final UUID uuid = player.getUniqueId();
-        final RegenCharge charge = new RegenCharge(amount,
-                exhaustionEventAvailable ? 0 : legacyRegenerationCost(player, event));
+        final RegenCharge charge = new RegenCharge(event, suppressed, exhaustionEventAvailable ? 0 : legacyRegenerationCost(player, event));
         pendingCharges.computeIfAbsent(uuid, ignored -> new ArrayDeque<>()).addLast(charge);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             final Deque<RegenCharge> pending = pendingCharges.get(uuid);
@@ -132,11 +142,11 @@ public class ModulePlayerRegen extends OCMModule {
                 pending.remove(charge);
                 if (pending.isEmpty()) pendingCharges.remove(uuid);
             }
-            if (charge.handled || !player.isOnline()) return;
-            // Legacy servers add the native cost directly after the heal event.
-            // Adjust the current total by that cost, preserving intervening changes.
-            // On event-capable servers this also covers synthetic heals with no native charge.
-            player.setExhaustion(Math.max(0, player.getExhaustion() - charge.nativeCost + charge.amount));
+            if (charge.handled || exhaustionEventAvailable || !player.isOnline()) return;
+            // FoodMetaData adds after the event, including cancelled heals. Correct before
+            // the next native food tick, retaining later plugin additions. At the cap of 40,
+            // indistinguishable foreign additions remain an explicit fallback limitation.
+            player.setExhaustion(Math.max(0, player.getExhaustion() - charge.nativeCost + charge.amount()));
         }, 1L);
     }
 
@@ -144,15 +154,16 @@ public class ModulePlayerRegen extends OCMModule {
         boolean fast = player.getFoodLevel() >= 20 && player.getSaturation() > 0;
         if (FAST_REGEN != null) fast = Reflector.invokeMethod(FAST_REGEN, event);
         final float cost;
-        if (fast) {
-            cost = Math.min(player.getSaturation(), 6.0f);
-        } else {
+        // The exhaustion API is absent here and there is no native cost accessor. This numerical
+        // fallback is verified in vanilla 1.10.2 abb.a(zs) (4.0 at offset 149) and
+        // 1.11 aci.a(aax) (6.0 at offset 149), plus Paper 1.9.4/1.12 FoodMetaData.a.
+        final boolean sixPointCost = Reflector.versionIsNewerOrEqualTo(1, 11, 0);
+        if (fast) cost = Math.min(player.getSaturation(), sixPointCost ? 6.0f : 4.0f);
+        else {
             final YamlConfiguration spigot = Bukkit.spigot().getConfig();
-            final double fallback = spigot.getDouble("world-settings.default.hunger.regen-exhaustion", 6.0);
-            cost = (float) spigot.getDouble(
-                    "world-settings." + player.getWorld().getName() + ".hunger.regen-exhaustion", fallback);
+            final double fallback = spigot.getDouble("world-settings.default.hunger.regen-exhaustion", sixPointCost ? 6.0 : 3.0);
+            cost = (float) spigot.getDouble("world-settings." + player.getWorld().getName() + ".hunger.regen-exhaustion", fallback);
         }
-        // Legacy FoodMetaData caps its addition at 40 exhaustion.
         return Math.max(0, Math.min(cost, 40.0f - player.getExhaustion()));
     }
 
@@ -168,51 +179,51 @@ public class ModulePlayerRegen extends OCMModule {
     private final class ExhaustionListener implements Listener {
         @EventHandler(priority = EventPriority.LOWEST)
         public void onExhaustion(EntityExhaustionEvent event) {
-            if (event.getExhaustionReason() != EntityExhaustionEvent.ExhaustionReason.REGEN) return;
-            final UUID uuid = event.getEntity().getUniqueId();
-            final Deque<RegenCharge> pending = pendingCharges.get(uuid);
+            if (event.getExhaustionReason() != EntityExhaustionEvent.ExhaustionReason.REGEN || !nativeFoodEvent()) return;
+            final Deque<RegenCharge> pending = pendingCharges.get(event.getEntity().getUniqueId());
             if (pending == null || pending.isEmpty()) return;
             final RegenCharge charge = pending.removeFirst();
-            if (pending.isEmpty()) pendingCharges.remove(uuid);
+            if (pending.isEmpty()) pendingCharges.remove(event.getEntity().getUniqueId());
             charge.handled = true;
-            // Later listeners can still modify or cancel this cost normally.
-            event.setExhaustion(charge.amount);
+            event.setExhaustion(charge.amount());
         }
     }
 
-    private static final class RegenCharge {
-        private final float amount;
+    private final class RegenCharge {
+        private final EntityRegainHealthEvent event;
+        private final boolean suppressed;
         private final float nativeCost;
+        private final float configuredCost = exhaustionToApply;
         private boolean handled;
-
-        private RegenCharge(float amount, float nativeCost) {
-            this.amount = amount;
+        private RegenCharge(EntityRegainHealthEvent event, boolean suppressed, float nativeCost) {
+            this.event = event;
+            this.suppressed = suppressed;
             this.nativeCost = nativeCost;
         }
+        private float amount() { return suppressed || event.isCancelled() ? 0 : configuredCost; }
     }
 
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent e) {
-        lastHealTick.remove(e.getPlayer().getUniqueId());
-        pendingCharges.remove(e.getPlayer().getUniqueId());
-        stopTickTaskIfIdle();
+    private void release(Player player) {
+        rates.restore(player);
+        tracker.remove(player);
+        legacyPlayers.remove(player.getUniqueId());
+        // Pending native corrections must finish even if a modeset changes inside the event.
+        if (legacyPlayers.isEmpty() && tickTask != null) {
+            tickTask.cancel();
+            tickTask = null;
+        }
     }
 
-    private void ensureTickTaskRunning() {
-        if (tickTask != null) return;
-        tickCounter = 0;
-        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            tickCounter++;
-            if (lastHealTick.isEmpty()) {
-                stopTickTaskIfIdle();
-            }
-        }, 1L, 1L);
+    private void shutdown() {
+        for (Player player : Bukkit.getOnlinePlayers()) release(player);
+        pendingCharges.clear();
     }
 
-    private void stopTickTaskIfIdle() {
-        if (tickTask == null) return;
-        if (!lastHealTick.isEmpty()) return;
-        tickTask.cancel();
-        tickTask = null;
+    @EventHandler public void onJoin(PlayerJoinEvent event) { refresh(event.getPlayer()); }
+    @EventHandler public void onWorldChange(PlayerChangedWorldEvent event) { refresh(event.getPlayer()); }
+    @EventHandler public void onDeath(PlayerDeathEvent event) { release(event.getEntity()); }
+    @EventHandler public void onRespawn(PlayerRespawnEvent event) {
+        Bukkit.getScheduler().runTask(plugin, () -> refresh(event.getPlayer()));
     }
+    @EventHandler public void onQuit(PlayerQuitEvent event) { release(event.getPlayer()); }
 }

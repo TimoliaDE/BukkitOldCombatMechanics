@@ -205,9 +205,12 @@ old-player-regen:
   # This is to make players' regeneration act mostly like it did in pre-1.9
   # Based on https://minecraft.gamepedia.com/Hunger?oldid=948685
   # How often a player should regenerate health, in milliseconds (In 1.8: 4 seconds)
-  # The foodTickerTimer might not be perfectly accurate so we give it ~10ms of leeway
+  # Rounded to the nearest server tick (50ms), with a minimum of one tick.
+  # Both saturated and unsaturated native regeneration use this interval when the API exists.
+  # Legacy servers use a shared timer observed before native food processing; boundary changes
+  # can differ by one tick. Native exhaustion correction cannot identify foreign costs at the cap of 40.
   interval: 3990
-  # How many half-hearts the player should heal by, every seconds specified above
+  # How many half-hearts the player should heal by at each interval
   amount: 1
   # How much exhaustion the player should get from healing. In 1.8: 3    In 1.9: 4    In 1.11: 6
   # If, after adding this, Minecraft finds the value is above 4, it subtracts 4
