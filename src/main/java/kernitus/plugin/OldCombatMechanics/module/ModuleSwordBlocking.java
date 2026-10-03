@@ -31,6 +31,7 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 
@@ -40,6 +41,7 @@ public class ModuleSwordBlocking extends OCMModule {
     private final Map<UUID, ItemStack> storedItems = new HashMap<>();
     private final Map<UUID, LegacySwordBlockState> legacyStates = new HashMap<>();
     private BukkitTask legacyTask;
+    private final Map<Class<?>, Field> legacyShieldHandleFields = new HashMap<>();
     private long tickCounter;
     private int restoreDelay;
     private boolean paperSupported;
@@ -96,12 +98,27 @@ public class ModuleSwordBlocking extends OCMModule {
         restoreDelay = module().getInt("restoreDelay", 40);
         handledEntityInteractions.clear();
         nextEntityInteractionPruneAtNanos = 0L;
-        if (!paperSupported || paperAdapter == null) return;
-        if (isEnabled() && isPaperAnimationEnabled()) return;
+        final boolean cleanComponents = paperSupported && paperAdapter != null &&
+                !(isEnabled() && isPaperAnimationEnabled());
 
         final Runnable cleanup = () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
-                onModesetChange(player);
+                final UUID id = player.getUniqueId();
+                if (!isEnabled(player) && areItemsStored(id)) {
+                    final ItemStack offhand = player.getInventory().getItemInOffHand();
+                    final LegacySwordBlockState state = legacyStates.get(id);
+                    final boolean owned = hasTemporaryLegacyShieldMarker(offhand) ||
+                            (state != null && state.nativeShield != null && state.nativeShield == nativeShieldIdentity(offhand));
+                    if (owned) {
+                        restore(player, true);
+                    } else {
+                        // A foreign replacement owns this slot now; discard our pending restoration.
+                        storedItems.remove(id);
+                        legacyStates.remove(id);
+                        stopLegacyTaskIfIdle();
+                    }
+                }
+                if (cleanComponents) sweepConsumableState(player, true);
             }
         };
 
@@ -387,6 +404,8 @@ public class ModuleSwordBlocking extends OCMModule {
             storedItems.put(id, offHandItem);
 
             inventory.setItemInOffHand(createTemporaryLegacyShield());
+            legacyStates.put(id, new LegacySwordBlockState(canMarkTemporaryLegacyShield() ? null :
+                    nativeShieldIdentity(inventory.getItemInOffHand())));
             // Force an inventory update to avoid ghost items
             player.updateInventory();
             // Best-effort: ask the server to start using the offhand item so blocking becomes visible immediately
@@ -640,10 +659,32 @@ public class ModuleSwordBlocking extends OCMModule {
 
     private void scheduleLegacyRestore(Player p) {
         final UUID id = p.getUniqueId();
-        final LegacySwordBlockState state = legacyStates.computeIfAbsent(id, ignored -> new LegacySwordBlockState());
+        final LegacySwordBlockState state = legacyStates.computeIfAbsent(id, ignored -> new LegacySwordBlockState(null));
         state.restoreAtTick = tickCounter + Math.max(0, restoreDelay);
         state.nextBlockingCheckTick = tickCounter + 10L;
         ensureLegacyTaskRunning();
+    }
+
+    // Older Bukkit has no persistent item marker. Retain the exact native stack, never infer ownership from equal values.
+    private Object nativeShieldIdentity(ItemStack item) {
+        if (item == null || item.getType() != Material.SHIELD) return null;
+        final Class<?> type = item.getClass();
+        if (!legacyShieldHandleFields.containsKey(type)) {
+            Field field = null;
+            try {
+                field = Reflector.getField(type, "handle");
+            } catch (RuntimeException ignored) {
+                // Unknown wrappers cannot establish ownership safely.
+            }
+            legacyShieldHandleFields.put(type, field);
+        }
+        final Field field = legacyShieldHandleFields.get(type);
+        if (field == null) return null;
+        try {
+            return field.get(item);
+        } catch (IllegalAccessException ignored) {
+            return null;
+        }
     }
 
     private boolean areItemsStored(UUID uuid) {
@@ -1120,6 +1161,12 @@ public class ModuleSwordBlocking extends OCMModule {
     }
 
     private static final class LegacySwordBlockState {
+        private final Object nativeShield;
+
+        private LegacySwordBlockState(Object nativeShield) {
+            this.nativeShield = nativeShield;
+        }
+
         private long restoreAtTick;
         private long nextBlockingCheckTick;
     }

@@ -23,6 +23,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerFishEvent
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.Vector
+import java.io.File
 import kotlin.math.abs
 
 @OptIn(ExperimentalKotest::class)
@@ -203,11 +204,11 @@ class FishingGravityIntegrationTest :
             val previous = ocm.config.get("fishing-rod-velocity.gravity")
             val fake = FakePlayer(testPlugin)
             var hook: FishHook? = null
-            var beforeTask: org.bukkit.scheduler.BukkitTask? = null
-            var afterTask: org.bukkit.scheduler.BukkitTask? = null
+            var restoreTask: (() -> Unit)? = null
+            val samples = mutableListOf<String>()
+            var changedAge = false
             val block = Bukkit.getWorld("world")!!.getBlockAt(0, 181, 1)
             val saved = block.state
-            var velocityBefore = Vector()
             var largestChange = 0.0
             var checked = 0
             try {
@@ -217,15 +218,6 @@ class FishingGravityIntegrationTest :
                 fake.spawn(Location(Bukkit.getWorld("world"), 8.0, 180.0, 8.0))
                 val player = fake.requireBukkitPlayer()
                 delay(100)
-                beforeTask =
-                    Bukkit.getScheduler().runTaskTimer(
-                        testPlugin,
-                        Runnable {
-                            hook?.let { if (it.location.block.type == Material.WATER) velocityBefore = it.velocity }
-                        },
-                        1L,
-                        1L,
-                    )
                 useProjectileItem(player, Material.FISHING_ROD)
                 hook =
                     nativeTestProjectiles(player)
@@ -233,26 +225,61 @@ class FishingGravityIntegrationTest :
                         .single()
                 hook.teleport(Location(player.world, 0.5, 181.5, 1.5))
                 hook.velocity = Vector()
-                afterTask =
-                    Bukkit.getScheduler().runTaskTimer(
-                        testPlugin,
-                        Runnable {
-                            hook?.let {
-                                if (it.location.block.type == Material.WATER) {
-                                    largestChange = maxOf(largestChange, it.velocity.subtract(velocityBefore).length())
-                                    checked++
-                                }
-                            }
-                        },
-                        1L,
-                        1L,
-                    )
+                val gravityTask =
+                    module.javaClass
+                        .getDeclaredField("gravityTask")
+                        .apply { isAccessible = true }
+                        .get(module) as org.bukkit.scheduler.BukkitRunnable
+                val scheduled = Bukkit.getScheduler().pendingTasks.single { it.taskId == gravityTask.taskId }
+                // Capture the scheduled runnable once. Equal-tick ordering differs across CraftScheduler versions.
+                val runnableField =
+                    generateSequence<Class<*>>(scheduled.javaClass) { it.superclass }
+                        .flatMap { it.declaredFields.asSequence() }
+                        .single { it.type == Runnable::class.java }
+                        .apply { isAccessible = true }
+                val original = runnableField.get(scheduled) as Runnable
+                val server =
+                    Bukkit
+                        .getServer()
+                        .javaClass
+                        .getMethod("getServer")
+                        .invoke(Bukkit.getServer())
+                val clock = server.javaClass.getField("currentTick").apply { isAccessible = true }
+                val activeHooks =
+                    module.javaClass
+                        .getDeclaredField("activeHooks")
+                        .apply { isAccessible = true }
+                        .get(module) as Map<*, *>
+                val observedHook = hook
+                val wrapper =
+                    Runnable {
+                        val age = observedHook.ticksLived
+                        val previousAge = activeHooks[observedHook]
+                        val inWater = observedHook.location.block.type.name in listOf("WATER", "STATIONARY_WATER")
+                        val velocityBefore = observedHook.velocity
+                        val tick = clock.getInt(null)
+                        original.run()
+                        if (inWater && previousAge != null && previousAge != age && activeHooks[observedHook] == age) {
+                            val change = observedHook.velocity.subtract(velocityBefore).length()
+                            largestChange = maxOf(largestChange, change)
+                            changedAge = changedAge || observedHook.ticksLived != age || clock.getInt(null) != tick
+                            checked++
+                            samples.add(
+                                "tick=$tick age=$age previousAge=$previousAge phase=scheduled-runnable " +
+                                    "before=$velocityBefore after=${observedHook.velocity} change=$change",
+                            )
+                        }
+                    }
+                runnableField.set(scheduled, wrapper)
+                restoreTask = { if (runnableField.get(scheduled) === wrapper) runnableField.set(scheduled, original) }
                 delay(200)
+                File(testPlugin.dataFolder, "fishing-water-phase-diagnostics.txt")
+                    .writeText(samples.joinToString("\n", postfix = "\n"))
                 (checked > 0) shouldBe true
+                changedAge shouldBe false
                 largestChange shouldBeLessThan 1e-8
             } finally {
-                beforeTask?.cancel()
-                afterTask?.cancel()
+                restoreTask?.invoke()
                 hook?.remove()
                 fake.removePlayer()
                 saved.update(true, false)

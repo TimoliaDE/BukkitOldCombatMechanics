@@ -12,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.utilities.Config
 import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance
 import kernitus.plugin.OldCombatMechanics.utilities.damage.OCMEntityDamageByEntityEvent
+import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.bukkit.Bukkit
@@ -33,6 +34,8 @@ import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.Vector
+import xyz.jpenilla.reflectionremapper.ReflectionRemapper
+import java.io.File
 import kotlin.coroutines.resume
 
 /** Native damage and hook flight, with separately labelled deterministic provenance checks. */
@@ -83,6 +86,44 @@ class CombatFidelityBlockingFishingIntegrationTest :
             )
         }
 
+        val remapper =
+            runCatching { ReflectionRemapper.forReobfMappingsInPaperJar() }.getOrElse { ReflectionRemapper.noop() }
+
+        fun stopNativeUse(player: Player) {
+            val handle = player.javaClass.getMethod("getHandle").invoke(player)
+            val livingType =
+                generateSequence<Class<*>>(handle.javaClass) { it.superclass }
+                    .first { it.simpleName in listOf("LivingEntity", "EntityLiving") }
+            val method =
+                listOf(remapper.remapMethodName(livingType, "stopUsingItem"), "clearActiveItem")
+                    .firstNotNullOfOrNull { Reflector.getMethod(handle.javaClass, it, 0) }
+            checkNotNull(method) { "No native item-use reset on ${handle.javaClass.name}" }.invoke(handle)
+            player.isBlocking shouldBe false
+        }
+
+        fun activeNativeStack(player: Player): Any {
+            val handle = player.javaClass.getMethod("getHandle").invoke(player)
+            val livingType =
+                generateSequence<Class<*>>(handle.javaClass) { it.superclass }
+                    .first { it.simpleName in listOf("LivingEntity", "EntityLiving") }
+            val method =
+                listOf(remapper.remapMethodName(livingType, "getUseItem"), "cJ", "cw")
+                    .firstNotNullOfOrNull { name ->
+                        Reflector.getMethod(handle.javaClass, name, 0)?.takeIf {
+                            it.returnType.simpleName == "ItemStack"
+                        }
+                    }
+            return checkNotNull(checkNotNull(method) { "No native active stack getter" }.invoke(handle))
+        }
+
+        fun requireHeldStack(stack: Any) {
+            val held =
+                listOf(victim.inventory.itemInMainHand, victim.inventory.itemInOffHand)
+                    .filter { it.type == Material.SHIELD }
+                    .map { Reflector.getField(it.javaClass, "handle").get(it) }
+            check(held.any { it === stack }) { "Native active shield is not the actual held stack" }
+        }
+
         fun requireBlocking() {
             // Legacy native shielding reads head yaw, which a fake player's teleport does not update.
             val handle = victim.javaClass.getMethod("getHandle").invoke(victim)
@@ -99,7 +140,9 @@ class CombatFidelityBlockingFishingIntegrationTest :
                     .filterIsInstance<kernitus.plugin.OldCombatMechanics.module.ModuleSwordBlocking>()
                     .single()
             check(victim.isBlocking || module.isPaperSwordBlocking(victim)) {
-                "Native victim is not blocking with shield or Paper sword"
+                "Native victim is not blocking with shield or Paper sword; " +
+                    "active=${runCatching { activeNativeStack(victim) }} " +
+                    "main=${victim.inventory.itemInMainHand} off=${victim.inventory.itemInOffHand}"
             }
         }
 
@@ -130,6 +173,7 @@ class CombatFidelityBlockingFishingIntegrationTest :
             withContext(BukkitMainThreadDispatcher(plugin)) {
                 configure()
                 for (player in listOf(rodder, victim)) {
+                    stopNativeUse(player)
                     player.inventory.clear()
                     player.gameMode = GameMode.SURVIVAL
                     player.noDamageTicks = 0
@@ -140,7 +184,6 @@ class CombatFidelityBlockingFishingIntegrationTest :
                 }
                 rodder.teleport(Location(rodder.world, 0.5, 100.0, 0.5, 0f, 0f))
                 victim.teleport(Location(victim.world, 0.5, 100.0, 4.5, 180f, 0f))
-                // Let native item use observe the cleared inventory before raising another item.
                 ticks(1)
             }
         }
@@ -163,6 +206,85 @@ class CombatFidelityBlockingFishingIntegrationTest :
                 ocm.config.loadFromString(originalConfig)
                 ocm.saveConfig()
                 Config.reload()
+            }
+        }
+
+        for (foreignReplacement in listOf(false, true)) {
+            test("real reload clears pending sword shield restore foreignReplacement=$foreignReplacement") {
+                val previousAnimation = ocm.config.get("sword-blocking.paper-animation")
+                val previousDelay = ocm.config.get("sword-blocking.restoreDelay")
+                try {
+                    ocm.config.set("sword-blocking.paper-animation", false)
+                    ocm.config.set("sword-blocking.restoreDelay", 40)
+                    configure("sword-blocking")
+                    victim.inventory.setItemInMainHand(ItemStack(Material.DIAMOND_SWORD))
+                    victim.inventory.setItemInOffHand(ItemStack(Material.TORCH, 3))
+                    Bukkit.getPluginManager().callEvent(
+                        PlayerInteractEvent(
+                            victim,
+                            Action.RIGHT_CLICK_AIR,
+                            victim.inventory.itemInMainHand,
+                            null,
+                            org.bukkit.block.BlockFace.SELF,
+                            EquipmentSlot.HAND,
+                        ),
+                    )
+                    victim.inventory.itemInOffHand.type shouldBe Material.SHIELD
+                    val swordBlocking =
+                        ModuleLoader
+                            .getModules()
+                            .filterIsInstance<kernitus.plugin.OldCombatMechanics.module.ModuleSwordBlocking>()
+                            .single()
+                    val storedItems =
+                        swordBlocking.javaClass
+                            .getDeclaredField("storedItems")
+                            .apply { isAccessible = true }
+                            .get(swordBlocking) as Map<*, *>
+                    storedItems.containsKey(victim.uniqueId) shouldBe true
+                    if (foreignReplacement) victim.inventory.setItemInOffHand(ItemStack(Material.SHIELD))
+                    val foreignStack =
+                        Reflector
+                            .getField(victim.inventory.itemInOffHand.javaClass, "handle")
+                            .get(victim.inventory.itemInOffHand)
+                    configure()
+                    storedItems.containsKey(victim.uniqueId) shouldBe false
+                    val states =
+                        swordBlocking.javaClass
+                            .getDeclaredField("legacyStates")
+                            .apply { isAccessible = true }
+                            .get(swordBlocking) as Map<*, *>
+                    states.containsKey(victim.uniqueId) shouldBe false
+                    swordBlocking.javaClass
+                        .getDeclaredField("legacyTask")
+                        .apply { isAccessible = true }
+                        .get(swordBlocking) shouldBe null
+                    if (foreignReplacement) {
+                        (
+                            Reflector
+                                .getField(victim.inventory.itemInOffHand.javaClass, "handle")
+                                .get(victim.inventory.itemInOffHand) === foreignStack
+                        ) shouldBe true
+                    } else {
+                        victim.inventory.itemInOffHand shouldBe ItemStack(Material.TORCH, 3)
+                    }
+                    stopNativeUse(victim)
+                    victim.inventory.setItemInOffHand(ItemStack(Material.SHIELD))
+                    val replacementStack =
+                        Reflector
+                            .getField(victim.inventory.itemInOffHand.javaClass, "handle")
+                            .get(victim.inventory.itemInOffHand)
+                    ticks(52)
+                    (
+                        Reflector
+                            .getField(victim.inventory.itemInOffHand.javaClass, "handle")
+                            .get(victim.inventory.itemInOffHand) === replacementStack
+                    ) shouldBe true
+                } finally {
+                    ocm.config.set("sword-blocking.paper-animation", previousAnimation)
+                    ocm.config.set("sword-blocking.restoreDelay", previousDelay)
+                    ocm.saveConfig()
+                    Config.reload()
+                }
             }
         }
 
@@ -411,6 +533,23 @@ class CombatFidelityBlockingFishingIntegrationTest :
                 victimFake.doBlocking().also { WeaponBaselineNativeCompat.ensureOffhandUse(victim) }
                 ticks(8)
                 requireBlocking()
+                // Replace a currently used shield in the same scheduler phase, without a native tick in between.
+                val previousStack = activeNativeStack(victim)
+                requireHeldStack(previousStack)
+                stopNativeUse(victim)
+                victim.inventory.clear()
+                victimFake.doBlocking().also { WeaponBaselineNativeCompat.ensureOffhandUse(victim) }
+                val replacementStack = activeNativeStack(victim)
+                (replacementStack !== previousStack) shouldBe true
+                requireHeldStack(replacementStack)
+                ticks(8)
+                requireBlocking()
+                (activeNativeStack(victim) === replacementStack) shouldBe true
+                requireHeldStack(replacementStack)
+                File(plugin.dataFolder, "blocking-fixture-diagnostics.txt").appendText(
+                    "damage=$damage replacement=true activeMatchesHeld=true " +
+                        "blocking=${victim.isBlocking} age=${victim.ticksLived}\n",
+                )
                 var observed: EntityDamageByEntityEvent? = null
                 var foreignEvents = 0
                 observe(EventPriority.NORMAL) {
