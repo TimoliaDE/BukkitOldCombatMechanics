@@ -6,21 +6,24 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import com.cryptomorin.xseries.XAttribute;
-import io.papermc.paper.event.player.PlayerInventorySlotChangeEvent;
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.AttackSpeedUtil;
 import kernitus.plugin.OldCombatMechanics.utilities.ConfigUtils;
-import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.Tag;
+import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.enchantments.Enchantment;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.player.*;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 
 import java.util.Collections;
 import java.util.Map;
@@ -30,12 +33,11 @@ import java.util.Map;
  */
 public class ModuleAttackCooldown extends OCMModule {
 
-    private boolean excludeNormalSpears;
-    private boolean excludeLungeSpears;
-
+    private static final double EPSILON = 0.0001;
     private static final double VANILLA_ATTACK_SPEED = 4.0;
 
-    private double genericAttackSpeed = 80.0;
+    private double genericAttackSpeed = 40.0;
+    private double minimumAttackCharge = 1.0;
     private Map<Material, Double> heldItemAttackSpeeds = Collections.emptyMap();
 
     public ModuleAttackCooldown(OCMMain plugin) {
@@ -44,10 +46,8 @@ public class ModuleAttackCooldown extends OCMModule {
 
     @Override
     public void reload() {
-        excludeNormalSpears = module().getBoolean("excludeNormalSpears", false);
-        excludeLungeSpears = module().getBoolean("excludeLungeSpears", true);
-
-        genericAttackSpeed = module().getDouble("generic-attack-speed", 80.0);
+        genericAttackSpeed = module().getDouble("generic-attack-speed", 40.0);
+        minimumAttackCharge = Math.clamp(module().getDouble("minimum-attack-charge", 1.0), 0.0, 1.0);
         heldItemAttackSpeeds = Collections.emptyMap();
 
         if (module().isConfigurationSection("held-item-attack-speeds")) {
@@ -55,6 +55,16 @@ public class ModuleAttackCooldown extends OCMModule {
         }
 
         Bukkit.getOnlinePlayers().forEach(this::adjustAttackSpeed);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerLogin(PlayerJoinEvent e) {
+        adjustAttackSpeed(e.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onWorldChange(PlayerChangedWorldEvent e) {
+        adjustAttackSpeed(e.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -92,10 +102,15 @@ public class ModuleAttackCooldown extends OCMModule {
 
     private void adjustAttackSpeed(Player player, ItemStack mainHand) {
         final double attackSpeed = isEnabled(player)
-                ? getConfiguredAttackSpeed(mainHand)
+                ? getConfiguredAttackSpeedBaseValue(mainHand)
                 : VANILLA_ATTACK_SPEED;
 
         setAttackSpeed(player, attackSpeed);
+
+        double currentMinimumAttackCharge = AttackSpeedUtil.getMinimumAttackCharge(mainHand);
+        if (Math.abs(minimumAttackCharge - currentMinimumAttackCharge) > EPSILON) {
+            AttackSpeedUtil.setMinimumAttackCharge(mainHand, minimumAttackCharge);
+        }
     }
 
     @Override
@@ -103,51 +118,39 @@ public class ModuleAttackCooldown extends OCMModule {
         adjustAttackSpeed(player);
     }
 
-    @EventHandler
-    public void onPlayerInventorySlotChange(PlayerInventorySlotChangeEvent event) {
-        if (!excludeNormalSpears && !excludeLungeSpears) return;
+    private double getConfiguredAttackSpeedBaseValue(ItemStack itemStack) {
+        final Double heldItemAttackSpeed = getHeldItemAttackSpeed(itemStack);
+        if (heldItemAttackSpeed == null) return genericAttackSpeed;
 
-        Player player = event.getPlayer();
-        if (!isEnabled(player)) return;
-
-        ItemStack oldItem = event.getOldItemStack();
-        ItemStack newItem = event.getNewItemStack();
-
-        boolean hasChanged = isAffected(oldItem) != isAffected(newItem);
-        if (hasChanged)
-            adjustAttackSpeed(player, newItem);
-    }
-
-    private boolean isAffected(ItemStack iStack) {
-        if (!Reflector.versionIsNewerOrEqualTo(1, 21, 11)) return false;
-
-        return iStack != null && (excludeNormalSpears && !hasLungeEffect(iStack) ||
-                excludeLungeSpears && hasLungeEffect(iStack)) &&
-                Tag.ITEMS_SPEARS.isTagged(iStack.getType());
-    }
-
-    @EventHandler
-    public void onPlayerItemHeld(PlayerItemHeldEvent event) {
-        if (!excludeNormalSpears && !excludeLungeSpears) return;
-
-        Player player = event.getPlayer();
-        if (!isEnabled(player)) return;
-
-        PlayerInventory inv = player.getInventory();
-        ItemStack oldItem = inv.getItem(event.getPreviousSlot());
-        ItemStack newItem = inv.getItem(event.getNewSlot());
-
-        boolean hasChanged = isAffected(oldItem) != isAffected(newItem);
-        if (hasChanged)
-            adjustAttackSpeed(player, newItem);
-    }
-
-    private double getConfiguredAttackSpeed(ItemStack itemStack) {
-        if (itemStack == null) {
-            return genericAttackSpeed;
+        final double defaultAttackSpeedAddNumber = getDefaultAttackSpeedAddNumber(itemStack.getType());
+        if (heldItemAttackSpeed + defaultAttackSpeedAddNumber <= 0.0) {
+            return heldItemAttackSpeed - defaultAttackSpeedAddNumber;
         }
 
-        return heldItemAttackSpeeds.getOrDefault(itemStack.getType(), genericAttackSpeed);
+        return heldItemAttackSpeed;
+    }
+
+    private Double getHeldItemAttackSpeed(ItemStack itemStack) {
+        if (itemStack == null) return null;
+
+        return heldItemAttackSpeeds.get(itemStack.getType());
+    }
+
+    private double getDefaultAttackSpeedAddNumber(Material material) {
+        final Attribute attackSpeedAttribute = XAttribute.ATTACK_SPEED.get();
+        if (attackSpeedAttribute == null) return 0.0;
+
+        try {
+            double addNumber = 0.0;
+            for (AttributeModifier modifier : material.getDefaultAttributeModifiers(EquipmentSlot.HAND).get(attackSpeedAttribute)) {
+                if (modifier.getOperation() == AttributeModifier.Operation.ADD_NUMBER) {
+                    addNumber += modifier.getAmount();
+                }
+            }
+            return addNumber;
+        } catch (NoSuchMethodError ignored) {
+            return 0.0;
+        }
     }
 
     /**
@@ -168,13 +171,5 @@ public class ModuleAttackCooldown extends OCMModule {
 
             attribute.setBaseValue(attackSpeed);
         }
-    }
-
-    private boolean hasLungeEffect(ItemStack iStack) {
-        if (!Reflector.versionIsNewerOrEqualTo(1, 21, 11)) return false;
-        if (iStack == null) return false;
-        if (!iStack.hasItemMeta()) return false;
-
-        return iStack.getItemMeta().hasEnchant(Enchantment.LUNGE);
     }
 }

@@ -6,6 +6,7 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.AttackRangeUtil;
 import kernitus.plugin.OldCombatMechanics.utilities.Messenger;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -14,12 +15,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerItemHeldEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerSwapHandItemsEvent;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
@@ -38,12 +34,13 @@ public class ModuleAttackRange extends OCMModule implements Listener {
     private static final String[] WEAPONS = {"sword", "axe", "pickaxe", "spade", "shovel", "hoe", "trident", "mace"};
 
     private boolean supported;
-    private float minRange;
-    private float maxRange;
-    private float minCreative;
-    private float maxCreative;
-    private float hitboxMargin;
-    private float mobFactor;
+    public float minRange;
+    public float maxRange;
+    public float minCreative;
+    public float maxCreative;
+    public float hitboxMargin;
+    public float mobFactor;
+    private boolean weaponsOnly;
 
     private PaperAttackRangeAdapter paperAdapter;
 
@@ -60,7 +57,9 @@ public class ModuleAttackRange extends OCMModule implements Listener {
             supported = true;
         } catch (Throwable t) {
             supported = false;
-            Messenger.warn("Attack range data-component API not available; module disabled. Required Paper data-component classes or methods were not detected. (" + t.getClass().getSimpleName() + ": " + t.getMessage() + ")");
+            Messenger.warn("Attack range data-component API not available; module disabled. " +
+                    "Required Paper data-component classes or methods were not detected. (" +
+                    t.getClass().getSimpleName() + ": " + t.getMessage() + ")");
         }
     }
 
@@ -82,18 +81,34 @@ public class ModuleAttackRange extends OCMModule implements Listener {
         maxCreative = (float) module().getDouble("max-creative-range", 4.0);
         hitboxMargin = (float) module().getDouble("hitbox-margin", 0.1);
         mobFactor = (float) module().getDouble("mob-factor", 1.0);
+        weaponsOnly = module().getBoolean("weapons-only", false);
 
         // Apply to currently online players so config changes take effect immediately
         Bukkit.getOnlinePlayers().forEach(this::applyToHeld);
     }
 
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (weaponsOnly) return;
+        if (!supported) return;
+
+        Player player = event.getPlayer();
+        if (!isEnabled(player)) return;
+
+        AttackRangeUtil.onPlayerInteract(this, event);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onJoin(PlayerJoinEvent event) {
+        if (!weaponsOnly) return;
+
         applyToHeld(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onHotbar(PlayerItemHeldEvent event) {
+        if (!weaponsOnly) return;
+
         // Clear the old override, then apply or clear the new one.
         cleanHand(event.getPlayer(), event.getPreviousSlot());
         applyToHeld(event.getPlayer());
@@ -101,6 +116,8 @@ public class ModuleAttackRange extends OCMModule implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onSwap(PlayerSwapHandItemsEvent event) {
+        if (!weaponsOnly) return;
+
         normaliseSwapEvent(event);
         reconcileSwapInventory(event.getPlayer());
     }
@@ -183,6 +200,8 @@ public class ModuleAttackRange extends OCMModule implements Listener {
     private class CleanerListener implements Listener {
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onHeldChange(PlayerItemHeldEvent event) {
+            if (!weaponsOnly) return;
+
             cleanHand(event.getPlayer(), event.getPreviousSlot());
         }
 
@@ -193,22 +212,30 @@ public class ModuleAttackRange extends OCMModule implements Listener {
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onDrop(PlayerDropItemEvent event) {
+            if (!weaponsOnly) return;
+
             clearComponentOverride(event.getItemDrop().getItemStack());
         }
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onDeath(PlayerDeathEvent event) {
+            if (!weaponsOnly) return;
+
             event.getDrops().forEach(ModuleAttackRange.this::clearComponentOverride);
         }
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onQuit(PlayerQuitEvent event) {
+            if (!weaponsOnly) return;
+
             clearComponentOverride(event.getPlayer().getInventory().getItemInMainHand());
             clearComponentOverride(event.getPlayer().getInventory().getItemInOffHand());
         }
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onWorldChange(PlayerChangedWorldEvent event) {
+            if (!weaponsOnly) return;
+
             clearComponentOverride(event.getPlayer().getInventory().getItemInMainHand());
             clearComponentOverride(event.getPlayer().getInventory().getItemInOffHand());
             applyToHeld(event.getPlayer());
@@ -292,8 +319,10 @@ public class ModuleAttackRange extends OCMModule implements Listener {
                 Class<?>[] params = m.getParameterTypes();
                 if (params.length != 2) continue;
                 // accept any data component type class
-                if (!dctClass.isAssignableFrom(params[0]) && !params[0].getName().contains("DataComponentType")) continue;
-                if (!params[1].isAssignableFrom(valueClass) && !valueClass.isAssignableFrom(params[1]) && !params[1].isAssignableFrom(Object.class)) continue;
+                if (!dctClass.isAssignableFrom(params[0]) && !params[0].getName().contains("DataComponentType"))
+                    continue;
+                if (!params[1].isAssignableFrom(valueClass) && !valueClass.isAssignableFrom(params[1]) && !params[1].isAssignableFrom(Object.class))
+                    continue;
                 return m;
             }
             throw new NoSuchMethodException(ItemStack.class.getName() + "#setData(DataComponentType, AttackRange)");

@@ -64,7 +64,6 @@ modesets:
     - "old-fall-damage"
     - "old-bucket-placement"
     - "damage-inside-wall"
-    - "attack-range"
     - "old-fishing-knockback"
     - "fishing-rod-velocity"
     - "projectile-knockback"
@@ -114,10 +113,6 @@ mode-messages:
 
 disable-attack-cooldown:
   # This is to disable the attack cooldown
-  # Excludes spears without the lunge effect from cooldown removal
-  excludeNormalSpears: false
-  # Excludes spears with the lunge effect from cooldown removal
-  excludeLungeSpears: true
   # What to set the attack speed to. Default for 1.9 is 4, at least 40 is needed for no cooldown.
   generic-attack-speed: 80
   # Optional per-material override for the item in the player's main hand.
@@ -127,7 +122,7 @@ disable-attack-cooldown:
   # Newer-version material keys that are unavailable on the current server are
   # ignored safely.
   held-item-attack-speeds:
-    TRIDENT: 1.1
+    # TRIDENT: 1.1
     MACE: 0.6
     WOODEN_SPEAR: 1.54
     GOLDEN_SPEAR: 1.05
@@ -136,24 +131,30 @@ disable-attack-cooldown:
     IRON_SPEAR: 1.05
     DIAMOND_SPEAR: 0.95
     NETHERITE_SPEAR: 0.87
+  # Minimum attack charge required for spears.
+  # Set to 1.0 to keep the vanilla behavior.
+  minimum-attack-charge: 1.0
 
 attack-frequency:
   # Allows changing the player invulnerability between hits
   # The hit delay to apply. Default for 1.9+ is 20 ticks (1 second)
-  playerDelay: 19
-  mobDelay: 19
+  playerDelay: 20
+  mobDelay: 20
 
 attack-range:
   # Applies 1.8-style hit detection (smaller hitbox margin, shorter creative reach).
   # Paper 1.21.11+ only; auto-disables on older/Paperless servers.
-  # Note: this module re-applies reach when items are held and strips it when swapping/dropping to avoid tainting stored items.
-  # Very frequent hotbar swapping may have a small performance cost.
+  # This applies if you hold no items or any item.
   min-range: 0.0
   max-range: 3.0
   min-creative-range: 0.0
   max-creative-range: 4.0
   hitbox-margin: 0.1
   mob-factor: 1.0
+  # Restricts this effect to weapons: sword, axe, pickaxe, spade, shovel, hoe, trident, or mace.
+  # Note: this module re-applies reach when items are held and strips it when swapping/dropping to avoid tainting
+  # stored items. Very frequent hotbar swapping may have a small performance cost.
+  weapons-only: false
 
 old-tool-damage:
   # This is to set the tool damage as in pre-1.9
