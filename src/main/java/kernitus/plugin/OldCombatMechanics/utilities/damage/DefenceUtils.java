@@ -10,6 +10,7 @@ import com.cryptomorin.xseries.XAttribute;
 import com.cryptomorin.xseries.XEnchantment;
 import com.cryptomorin.xseries.XPotion;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector;
+import kernitus.plugin.OldCombatMechanics.utilities.potions.PotionEffects;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.SpigotFunctionChooser;
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.VersionCompatUtils;
 import org.bukkit.Material;
@@ -22,6 +23,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.tag.DamageTypeTags;
 
 import java.util.Collection;
 import java.util.EnumSet;
@@ -84,13 +86,13 @@ public class DefenceUtils {
      * @param damagedEntity   The entity that was damaged
      * @param damageModifiers A map of the damage modifiers and their values from
      *                        the event
-     * @param damageCause     The cause of the damage
+     * @param event           The original damage event
      */
     @SuppressWarnings("deprecation")
     public static void calculateDefenceDamageReduction(LivingEntity damagedEntity,
-            Map<EntityDamageEvent.DamageModifier, Double> damageModifiers,
-            EntityDamageEvent.DamageCause damageCause,
-            boolean randomness) {
+                                                       Map<EntityDamageEvent.DamageModifier, Double> damageModifiers,
+                                                       EntityDamageEvent.DamageCause damageCause,
+                                                       boolean randomness) {
 
         final double armourPoints = getArmourPoints(damagedEntity);
         // Make sure we don't go over 100% protection
@@ -175,7 +177,7 @@ public class DefenceUtils {
 
         // Calculate resistance
         if (defender.hasPotionEffect(XPotion.RESISTANCE.get())) {
-            int resistanceLevel = defender.getPotionEffect(XPotion.RESISTANCE.get()).getAmplifier() + 1;
+            int resistanceLevel = PotionEffects.getOrNull(defender, XPotion.RESISTANCE.get()).getAmplifier() + 1;
             finalDamage *= 1.0 - (resistanceLevel * 0.2);
         }
 
@@ -308,17 +310,18 @@ public class DefenceUtils {
 
     private static double calculateArmourEnchantmentReductionFactor(ItemStack[] armourContents,
             EntityDamageEvent.DamageCause cause, boolean randomness) {
+        return calculateArmourEnchantmentReductionFactor(armourContents, cause, randomness, null);
+    }
+
+    private static double calculateArmourEnchantmentReductionFactor(ItemStack[] armourContents,
+            EntityDamageEvent.DamageCause cause, boolean randomness, DamageTypeTags tags) {
         int totalEpf = 0;
         for (ItemStack armourItem : armourContents) {
             if (armourItem != null && armourItem.getType() != Material.AIR) {
                 warnOnUnknownArmourEnchantments(armourItem);
                 for (EnchantmentType enchantmentType : EnchantmentType.values()) {
-                    if (!enchantmentType.protectsAgainst(cause))
-                        continue;
-
                     int enchantmentLevel = armourItem.getEnchantmentLevel(enchantmentType.getEnchantment());
-
-                    if (enchantmentLevel > 0) {
+                    if (enchantmentLevel > 0 && enchantmentType.protectsAgainst(cause)) {
                         totalEpf += enchantmentType.getEpf(enchantmentLevel);
                     }
                 }

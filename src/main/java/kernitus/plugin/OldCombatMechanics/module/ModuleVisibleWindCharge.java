@@ -81,128 +81,6 @@ public class ModuleVisibleWindCharge extends OCMModule {
         }
     }
 
-    // TODO
-//     public void attack(Entity entity) {
-//        if (entity.aD() && !entity.l(this)) {
-//            float f = (float)this.getAttributeInstance(GenericAttributes.ATTACK_DAMAGE).getValue();
-//            byte b0 = 0;
-//            float f1 = 0.0F;
-//            if (entity instanceof EntityLiving) {
-//                f1 = EnchantmentManager.a(this.bA(), ((EntityLiving)entity).getMonsterType());
-//            } else {
-//                f1 = EnchantmentManager.a(this.bA(), EnumMonsterType.UNDEFINED);
-//            }
-//
-//            int i = b0 + EnchantmentManager.a(this);
-//            if (this.isSprinting()) {
-//                ++i;
-//            }
-//
-//            if (f > 0.0F || f1 > 0.0F) {
-//                boolean flag = this.fallDistance > 0.0F && !this.onGround && !this.k_() && !this.V() && !this.hasEffect(MobEffectList.BLINDNESS) && this.vehicle == null && entity instanceof EntityLiving;
-//                if (flag && f > 0.0F) {
-//                    f *= 1.5F;
-//                }
-//
-//                f += f1;
-//                boolean flag1 = false;
-//                int j = EnchantmentManager.getFireAspectEnchantmentLevel(this);
-//                if (entity instanceof EntityLiving && j > 0 && !entity.isBurning()) {
-//                    EntityCombustByEntityEvent combustEvent = new EntityCombustByEntityEvent(this.getBukkitEntity(), entity.getBukkitEntity(), 1);
-//                    Bukkit.getPluginManager().callEvent(combustEvent);
-//                    if (!combustEvent.isCancelled()) {
-//                        flag1 = true;
-//                        entity.setOnFire(combustEvent.getDuration());
-//                    }
-//                }
-//
-//                double d0 = entity.motX;
-//                double d1 = entity.motY;
-//                double d2 = entity.motZ;
-//                boolean flag2 = entity.damageEntity(DamageSource.playerAttack(this), f);
-//                if (flag2) {
-//                    if (i > 0) {
-//                        entity.g((double)(-MathHelper.sin(this.yaw * (float)Math.PI / 180.0F) * (float)i * 0.5F), 0.1, (double)(MathHelper.cos(this.yaw * (float)Math.PI / 180.0F) * (float)i * 0.5F));
-//                        this.motX *= 0.6;
-//                        this.motZ *= 0.6;
-//                        this.setSprinting(false);
-//                    }
-//
-//                    if (entity instanceof EntityPlayer && entity.velocityChanged) {
-//                        boolean cancelled = false;
-//                        Player player = (Player)entity.getBukkitEntity();
-//                        Vector velocity = new Vector(d0, d1, d2);
-//                        PlayerVelocityEvent event = new PlayerVelocityEvent(player, velocity.clone());
-//                        this.world.getServer().getPluginManager().callEvent(event);
-//                        if (event.isCancelled()) {
-//                            cancelled = true;
-//                        } else if (!velocity.equals(event.getVelocity())) {
-//                            player.setVelocity(event.getVelocity());
-//                        }
-//
-//                        if (!cancelled) {
-//                            ((EntityPlayer)entity).playerConnection.sendPacket(new PacketPlayOutEntityVelocity(entity));
-//                            entity.velocityChanged = false;
-//                            entity.motX = d0;
-//                            entity.motY = d1;
-//                            entity.motZ = d2;
-//                        }
-//                    }
-//
-//                    if (flag) {
-//                        this.b(entity);
-//                    }
-//
-//                    if (f1 > 0.0F) {
-//                        this.c(entity);
-//                    }
-//
-//                    if (f >= 18.0F) {
-//                        this.b((Statistic)AchievementList.F);
-//                    }
-//
-//                    this.p(entity);
-//                    if (entity instanceof EntityLiving) {
-//                        EnchantmentManager.a((EntityLiving)entity, this);
-//                    }
-//
-//                    EnchantmentManager.b(this, entity);
-//                    ItemStack itemstack = this.bZ();
-//                    Object object = entity;
-//                    if (entity instanceof EntityComplexPart) {
-//                        IComplex icomplex = ((EntityComplexPart)entity).owner;
-//                        if (icomplex instanceof EntityLiving) {
-//                            object = (EntityLiving)icomplex;
-//                        }
-//                    }
-//
-//                    if (itemstack != null && object instanceof EntityLiving) {
-//                        itemstack.a((EntityLiving)object, this);
-//                        if (itemstack.count == 0) {
-//                            this.ca();
-//                        }
-//                    }
-//
-//                    if (entity instanceof EntityLiving) {
-//                        this.a(StatisticList.w, Math.round(f * 10.0F));
-//                        if (j > 0) {
-//                            EntityCombustByEntityEvent combustEvent = new EntityCombustByEntityEvent(this.getBukkitEntity(), entity.getBukkitEntity(), j * 4);
-//                            Bukkit.getPluginManager().callEvent(combustEvent);
-//                            if (!combustEvent.isCancelled()) {
-//                                entity.setOnFire(combustEvent.getDuration());
-//                            }
-//                        }
-//                    }
-//
-//                    this.applyExhaustion(this.world.spigotConfig.combatExhaustion);
-//                } else if (flag1) {
-//                    entity.extinguish();
-//                }
-//            }
-//        }
-//
-//    }
-
     private void startParticleTaskIfNeeded() {
         if (particleTaskId != -1) return;
         particleTaskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, this::onTick, 0, 1L);
@@ -219,7 +97,6 @@ public class ModuleVisibleWindCharge extends OCMModule {
 
         windCharges.removeIf(charge -> {
             if (charge.isDead()) return true;
-            // TODO: Versioning der .jar-Datei später ändern
 
             Location particleLoc = charge.getLocation()
                     .add(0, charge.getBoundingBox().getHeight(), 0);

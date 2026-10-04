@@ -165,6 +165,17 @@ object KotestRunner {
                             CopperToolsIntegrationTest::class,
                             OldPotionEffectsIntegrationTest::class,
                             InvulnerabilityDamageIntegrationTest::class,
+                            // This Paper experiment is opt-in and is excluded from the cross-version suite.
+                            *if (System
+                                    .getProperty(
+                                        "kotest.filter.specs",
+                                        "",
+                                    ).contains("PreAttackProbeIntegrationTest")
+                            ) {
+                                arrayOf(PreAttackProbeIntegrationTest::class)
+                            } else {
+                                emptyArray()
+                            },
                             FireAspectOverdamageIntegrationTest::class,
                             OldCriticalHitsIntegrationTest::class,
                             OldToolDamageMobIntegrationTest::class,
@@ -172,18 +183,26 @@ object KotestRunner {
                             GoldenAppleIntegrationTest::class,
                             OldArmourDurabilityIntegrationTest::class,
                             OldArmourStrengthModesetIntegrationTest::class,
+                            ModuleInteractionEdgeCasesIntegrationTest::class,
                             MixedModePvPIntegrationTest::class,
                             ProjectileKnockbackIntegrationTest::class,
+                            ArrowKnockbackFidelityIntegrationTest::class,
+                            CombatFidelityBlockingFishingIntegrationTest::class,
                             PlayerKnockbackIntegrationTest::class,
                             AttackCooldownTrackerIntegrationTest::class,
                             AttackCooldownHeldItemIntegrationTest::class,
                             PlayerRegenIntegrationTest::class,
+                            NativeRegenerationIntegrationTest::class,
                             FishingRodVelocityIntegrationTest::class,
+                            FishingGravityIntegrationTest::class,
+                            OldPotionThrowingIntegrationTest::class,
+                            ProjectileLaunchFidelityIntegrationTest::class,
                             SwordSweepIntegrationTest::class,
                             PacketCancellationIntegrationTest::class,
                             EnderpearlCooldownIntegrationTest::class,
                             SpigotFunctionChooserIntegrationTest::class,
                             ChorusFruitIntegrationTest::class,
+                            WeaponDamageBaselineIntegrationTest::class,
                             CustomWeaponDamageIntegrationTest::class,
                             ToolDamageTooltipIntegrationTest::class,
                             SwordBlockingIntegrationTest::class,

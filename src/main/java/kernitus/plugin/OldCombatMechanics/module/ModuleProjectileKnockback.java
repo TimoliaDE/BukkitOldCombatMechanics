@@ -6,7 +6,6 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -24,21 +23,20 @@ public class ModuleProjectileKnockback extends OCMModule {
         super(plugin, "projectile-knockback");
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onEntityHit(EntityDamageByEntityEvent event) {
-        Entity damager = event.getDamager();
-        Entity damagee = event.getEntity();
-        if (!isEnabled(damager, damagee)) return;
+    @EventHandler(priority = EventPriority.NORMAL)
+    public void onEntityHit(EntityDamageByEntityEvent e) {
+        if (!isEnabled(e.getDamager(), e.getEntity())) return;
 
-        final EntityType type = damager.getType();
+        final EntityType type = e.getDamager().getType();
 
         switch (type) {
             case SNOWBALL: case EGG: case ENDER_PEARL:
-                if (event.getDamage() == 0.0) { // So we don't override enderpearl fall damage
-                    event.setDamage(module().getDouble("damage." + type.toString().toLowerCase(Locale.ROOT)));
-                    if (event.isApplicable(EntityDamageEvent.DamageModifier.ABSORPTION))
-                        event.setDamage(EntityDamageEvent.DamageModifier.ABSORPTION, 0);
+                if (e.getDamage() == 0.0) { // So we don't override enderpearl fall damage
+                    e.setDamage(module().getDouble("damage." + type.toString().toLowerCase(Locale.ROOT)));
+                    if (e.isApplicable(EntityDamageEvent.DamageModifier.ABSORPTION))
+                        e.setDamage(EntityDamageEvent.DamageModifier.ABSORPTION, 0);
                 }
         }
+
     }
 }

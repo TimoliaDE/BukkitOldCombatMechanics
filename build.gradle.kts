@@ -21,7 +21,7 @@ idea {
 }
 
 group = "kernitus.plugin.OldCombatMechanics"
-version = "v2.6.0-2026_08_15" // x-release-please-version
+version = "v2.7.1-2026_10_05" // x-release-please-version
 description = "OldCombatMechanics"
 
 allprojects {

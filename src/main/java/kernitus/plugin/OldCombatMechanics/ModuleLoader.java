@@ -36,7 +36,27 @@ public class ModuleLoader {
     }
 
     public static void toggleModules() {
-        modules.forEach(module -> setState(module, module.isEnabled()));
+        // These LOWEST listeners depend on the registration order established in OCMMain.
+        // Re-enabling one alone would append it after its consumers. Refresh this group
+        // only when membership changes, leaving ordinary reloads and other modules alone.
+        final Set<String> damagePipeline = new HashSet<>(Arrays.asList(
+                "old-fishing-knockback", "projectile-knockback",
+                "entity-damage-listener", "shield-damage-reduction", "old-armour-strength"));
+        final boolean pipelineChanged = modules.stream()
+                .filter(module -> damagePipeline.contains(module.getConfigName()))
+                .anyMatch(module -> eventRegistry.isRegistered(module) != module.isEnabled());
+        if (pipelineChanged) {
+            modules.stream().filter(module -> damagePipeline.contains(module.getConfigName()))
+                    .forEach(eventRegistry::unregisterListener);
+        }
+        // Claim rod provenance and inject projectile chip before LOWEST blocking on both
+        // initial enable and reload. Preserve the existing order of the other consumers.
+        modules.stream().filter(module -> module.getConfigName().equals("old-fishing-knockback")
+                        || module.getConfigName().equals("projectile-knockback"))
+                .forEach(module -> setState(module, module.isEnabled()));
+        modules.stream().filter(module -> !module.getConfigName().equals("old-fishing-knockback")
+                        && !module.getConfigName().equals("projectile-knockback"))
+                .forEach(module -> setState(module, module.isEnabled()));
     }
 
     private static void setState(OCMModule module, boolean state) {

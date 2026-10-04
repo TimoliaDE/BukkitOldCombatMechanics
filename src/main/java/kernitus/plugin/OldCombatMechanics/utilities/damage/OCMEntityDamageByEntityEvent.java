@@ -31,6 +31,15 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
 
     private boolean cancelled;
     private static final HandlerList handlers = new HandlerList();
+    private static final DamageCause nativeSweepCause = findNativeSweepCause();
+
+    private static DamageCause findNativeSweepCause() {
+        try {
+            return DamageCause.valueOf("ENTITY_SWEEP_ATTACK");
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
 
     @Override
     public HandlerList getHandlers() {
@@ -116,6 +125,18 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
         // Technically the weapon could be in the offhand, i.e. a bow.
         // However, we are only concerned with melee weapons here, which will always be in the main hand.
 
+        if (isNativeSweepAttack()) {
+            // Native sweep formulae differ between servers. Retain their offensive amount and let
+            // the common damage pipeline apply immunity and defence without reversing primary-hit effects.
+            // Known limitation (#890): Sweeping Edge uses the server's native attack damage. Changes
+            // OCM makes to weapon damage or Strength in the primary Bukkit damage event do not feed
+            // into that calculation, so sweep damage can differ from the configured primary damage.
+            // Direct weapon-attribute changes should address the weapon component; verify this across
+            // server versions before changing this path, and account for potion effects separately.
+            baseDamage = this.rawDamage;
+            return;
+        }
+
         final EntityType damageeType = damagee.getType();
 
         warnOnUnknownWeaponEnchantments(weapon);
@@ -197,7 +218,8 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
             debug(livingDamager, "Weakness compensated; skipping base weakness modifier");
         }
 
-        baseDamage = tempDamage + weaknessForBase - (strengthModifier * strengthLevel);
+        // Reverse native potion modifiers before listeners apply the configured effects.
+        baseDamage = tempDamage - weaknessForBase - (strengthModifier * strengthLevel);
         debug(livingDamager, "Base tool damage: " + baseDamage);
     }
 
@@ -261,6 +283,10 @@ public class OCMEntityDamageByEntityEvent extends Event implements Cancellable {
 
     public DamageCause getCause() {
         return cause;
+    }
+
+    public boolean isNativeSweepAttack() {
+        return nativeSweepCause != null && cause == nativeSweepCause;
     }
 
     public double getRawDamage() {

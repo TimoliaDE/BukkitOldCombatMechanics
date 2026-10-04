@@ -23,7 +23,13 @@ The following options have been added to the config
 - `old-bucket-placement`
 - `damage-inside-wall`
 
-In addition, the default values for the following config options have been adjusted to better match Minecraft 1.8 PvP mechanics:
+The following suboptions have been also dded apart from the original plugin:
+- `minimum-attack-charge` from `disable-attack-cooldown`
+- `weapons-only` from `attack-range`
+- `noShields`, `noSnowballs` from `shield-damage-reduction`
+
+In addition, the default values for the following config options have been adjusted to better match Minecraft 
+1.8 PvP mechanics:
 
 - `attack-frequency`
 - `shield-damage-reduction`

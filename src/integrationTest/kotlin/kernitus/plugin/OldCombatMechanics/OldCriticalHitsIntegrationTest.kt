@@ -16,9 +16,11 @@ import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import kernitus.plugin.OldCombatMechanics.module.ModuleOldCriticalHits
 import kernitus.plugin.OldCombatMechanics.module.ModuleOldToolDamage
+import kernitus.plugin.OldCombatMechanics.utilities.Config
 import kernitus.plugin.OldCombatMechanics.utilities.damage.DamageUtils
 import kernitus.plugin.OldCombatMechanics.utilities.damage.NewWeaponDamage
 import kernitus.plugin.OldCombatMechanics.utilities.damage.OCMEntityDamageByEntityEvent
+import kernitus.plugin.OldCombatMechanics.utilities.damage.ServerCriticalMultiplier
 import kernitus.plugin.OldCombatMechanics.utilities.damage.WeaponDamages
 import kernitus.plugin.OldCombatMechanics.utilities.reflection.Reflector
 import kernitus.plugin.OldCombatMechanics.utilities.storage.PlayerStorage.getPlayerData
@@ -28,9 +30,12 @@ import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.attribute.AttributeModifier
+import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityDamageByEntityEvent
@@ -39,6 +44,7 @@ import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.Vector
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.Callable
 import kotlin.math.abs
@@ -65,6 +71,7 @@ class OldCriticalHitsIntegrationTest :
         extensions(MainThreadDispatcherExtension(testPlugin))
 
         val isLegacy = !Reflector.versionIsNewerOrEqualTo(1, 13, 0)
+        var attackApiUnavailable = false
         val legacySpeedModifierId = UUID.fromString("c1f6010f-4d2e-4b2e-9a2f-3f0d0f1b2e3c")
 
         fun runSync(action: () -> Unit) {
@@ -194,7 +201,7 @@ class OldCriticalHitsIntegrationTest :
             item: ItemStack,
         ) {
             if (isLegacy) {
-                // On legacy versions, avoid mutating item meta; directly adjust player attributes instead.
+                // Legacy attack speed uses player attributes; weapon damage follows native equipment ticking.
                 val meta = item.itemMeta
                 if (meta != null) {
                     runCatching {
@@ -206,15 +213,7 @@ class OldCriticalHitsIntegrationTest :
                     item.itemMeta = meta
                 }
 
-                val useDamageAttribute = !Reflector.versionIsNewerOrEqualTo(1, 12, 0)
-                if (useDamageAttribute) {
-                    val attackDamageAttribute = XAttribute.ATTACK_DAMAGE.get()
-                    val damageAttribute = attackDamageAttribute?.let { player.getAttribute(it) }
-                    val configuredDamage =
-                        WeaponDamages.getDamage(item.type).toDouble().takeIf { it > 0 }
-                            ?: (NewWeaponDamage.getDamageOrNull(item.type) ?: 1.0f).toDouble()
-                    damageAttribute?.baseValue = configuredDamage
-                }
+                // Native equipment ticks apply weapon damage modifiers to the player's default base.
                 player.inventory.setItemInMainHand(item)
                 applyAttackDamageModifiers(player, item)
                 player.updateInventory()
@@ -230,6 +229,13 @@ class OldCriticalHitsIntegrationTest :
         fun spawnVictim(location: Location): LivingEntity {
             val world = location.world ?: error("World missing for victim spawn")
             return world.spawn(location, org.bukkit.entity.Cow::class.java).apply {
+                // The recharge wait must not let the target fall to its death before the native attack.
+                setAI(false)
+                try {
+                    setGravity(false)
+                } catch (_: NoSuchMethodError) {
+                    // Older Bukkit APIs retain native gravity.
+                }
                 maximumNoDamageTicks = 0
                 noDamageTicks = 0
                 isInvulnerable = false
@@ -240,14 +246,65 @@ class OldCriticalHitsIntegrationTest :
         suspend fun hitAndCaptureDamage(
             weapon: ItemStack,
             critical: Boolean,
+            sprinting: Boolean = true,
+            nativeMultiplier: Double? = null,
         ): Double {
             val events = mutableListOf<EntityDamageByEntityEvent>()
             val ocmEvents = mutableListOf<OCMEntityDamageByEntityEvent>()
             lateinit var victim: LivingEntity
+            var targetSpawned = false
+            var preAttackCount = 0
+
+            fun diagnostic(phase: String) {
+                if (nativeMultiplier == null) return
+                File(testPlugin.dataFolder, "critical-native-diagnostics.txt").appendText(
+                    "phase=$phase critical=$critical " +
+                        "attackerHealth=${attacker.health} attackerDead=${attacker.isDead} " +
+                        "attackerValid=${attacker.isValid} online=${attacker.isOnline} " +
+                        "attackerY=${attacker.location.y} victimY=${victim.location.y} " +
+                        "victimHealth=${victim.health} victimDead=${victim.isDead} victimValid=${victim.isValid} " +
+                        "distance=${attacker.location.distance(victim.location)} " +
+                        "chunkLoaded=${victim.world.isChunkLoaded(
+                            victim.location.blockX shr 4,
+                            victim.location.blockZ shr 4,
+                        )} " +
+                        "preAttack=$preAttackCount events=${events.size} cancelled=${events.lastOrNull()?.isCancelled} ocmEvents=${ocmEvents.size}\n",
+                )
+            }
+
+            fun attack() {
+                diagnostic("before attack")
+                if (nativeMultiplier != null) {
+                    withClue("Native critical fixture must retain a living target throughout the recharge wait") {
+                        victim.isValid shouldBe true
+                        victim.isDead shouldBe false
+                        check(victim.health > 0.0)
+                        DamageUtils.getAttackCooldown.apply(attacker).toDouble() shouldBe (1.0 plusOrMinus 0.001)
+                    }
+                    if (!attackApiUnavailable) {
+                        try {
+                            attacker.attack(victim)
+                            diagnostic("after attack")
+                            return
+                        } catch (_: NoSuchMethodError) {
+                            attackApiUnavailable = true
+                        }
+                    }
+                    val handle = attacker.javaClass.getMethod("getHandle").invoke(attacker)
+                    val targetHandle = victim.javaClass.getMethod("getHandle").invoke(victim)
+                    val method =
+                        Reflector.getMethodAssignable(handle.javaClass, "attack", targetHandle.javaClass)
+                            ?: error("Native player attack method unavailable")
+                    method.invoke(handle, targetHandle)
+                } else {
+                    attackCompat(attacker, victim)
+                }
+                diagnostic("after attack")
+            }
 
             val listener =
                 object : Listener {
-                    @EventHandler
+                    @EventHandler(priority = EventPriority.MONITOR)
                     fun onDamage(event: EntityDamageByEntityEvent) {
                         if (event.damager.uniqueId == attacker.uniqueId &&
                             event.entity.uniqueId == victim.uniqueId
@@ -276,12 +333,32 @@ class OldCriticalHitsIntegrationTest :
                 runSync {
                     val world = checkNotNull(Bukkit.getWorld("world"))
                     val victimLocation = Location(world, 1.2, 100.0, 0.0)
-                    victim = spawnVictim(victimLocation)
-                    Bukkit.getPluginManager().registerEvents(listener, testPlugin)
+                    if (nativeMultiplier == null) {
+                        victim = spawnVictim(victimLocation)
+                        targetSpawned = true
+                        Bukkit.getPluginManager().registerEvents(listener, testPlugin)
+                    }
+                    if (nativeMultiplier != null) {
+                        @Suppress("UNCHECKED_CAST")
+                        val preClass =
+                            runCatching {
+                                Class.forName(
+                                    "io.papermc.paper.event.player.PrePlayerAttackEntityEvent",
+                                ) as Class<out Event>
+                            }.getOrNull()
+                        if (preClass != null) {
+                            Bukkit
+                                .getPluginManager()
+                                .registerEvent(preClass, listener, EventPriority.MONITOR, { _, event ->
+                                    val source = preClass.getMethod("getPlayer").invoke(event) as Player
+                                    if (source.uniqueId == attacker.uniqueId) preAttackCount++
+                                }, testPlugin)
+                        }
+                    }
 
                     equip(attacker, weapon)
                 }
-                delayTicks(1)
+                delayTicks(if (nativeMultiplier != null) 25 else 1)
                 if (isLegacy) {
                     // Vanilla 1.12 applies attack cooldown scaling before the Bukkit damage event fires.
                     // Give the fake player a short warmup so the baseline (non-critical) hit is not under-scaled.
@@ -289,6 +366,13 @@ class OldCriticalHitsIntegrationTest :
                 }
                 val base = Location(attacker.world, 0.0, 100.0, 0.0)
                 runSync {
+                    if (nativeMultiplier != null) {
+                        // Legacy cows retain gravity. Spawn after recharge so native flight cannot kill
+                        // or injure the target while the attacker waits.
+                        victim = spawnVictim(Location(attacker.world, 1.2, 100.0, 0.0))
+                        targetSpawned = true
+                        Bukkit.getPluginManager().registerEvents(listener, testPlugin)
+                    }
                     attacker.teleport(base)
                     attacker.velocity = Vector(0.0, 0.0, 0.0)
                     attacker.isSprinting = false
@@ -300,7 +384,7 @@ class OldCriticalHitsIntegrationTest :
                     // Give the server one tick to recognise the falling state, then re-apply immediately before the swing
                     // so it does not get cleared by ticking (varies by version / fake player internals).
                     runSync {
-                        attacker.isSprinting = true
+                        attacker.isSprinting = sprinting
                         attacker.teleport(attacker.location.add(0.0, 1.0, 0.0))
                         attacker.velocity = Vector(0.0, -0.1, 0.0)
                         attacker.fallDistance = 2f
@@ -308,7 +392,7 @@ class OldCriticalHitsIntegrationTest :
                     }
                     delayTicks(1)
                     runSync {
-                        attacker.isSprinting = true
+                        attacker.isSprinting = sprinting
                         attacker.velocity = Vector(0.0, -0.1, 0.0)
                         attacker.fallDistance = 2f
                         setOnGround(attacker, false)
@@ -329,7 +413,7 @@ class OldCriticalHitsIntegrationTest :
                                 "onGround=${attacker.isOnGround}",
                         )
                         attacker.updateInventory()
-                        attackCompat(attacker, victim)
+                        attack()
                     }
                 } else {
                     runSync {
@@ -349,11 +433,22 @@ class OldCriticalHitsIntegrationTest :
                                 "onGround=${attacker.isOnGround}",
                         )
                         attacker.updateInventory()
-                        attackCompat(attacker, victim)
+                        attack()
                     }
                 }
                 delayTicks(4)
-                events.firstOrNull()?.damage?.let { return it }
+                events.firstOrNull()?.damage?.let {
+                    if (nativeMultiplier != null) {
+                        val nativeEvent = ocmEvents.firstOrNull() ?: error("Expected OCM event for native attack")
+                        val expected =
+                            (NewWeaponDamage.getDamageOrNull(weapon.type) ?: error("Unknown weapon")) *
+                                (if (critical) nativeMultiplier else 1.0)
+                        withClue("Native attack damage before OCM recalculation") {
+                            nativeEvent.rawDamage shouldBe (expected plusOrMinus 0.001)
+                        }
+                    }
+                    return it
+                }
                 if (critical) {
                     val ocmEvent = ocmEvents.lastOrNull()
                     if (ocmEvent != null && !ocmEvent.was1_8Crit()) {
@@ -364,7 +459,7 @@ class OldCriticalHitsIntegrationTest :
                     }
                 }
 
-                if (isLegacy) {
+                if (isLegacy && nativeMultiplier == null) {
                     // As a last resort on legacy, drive damage via Bukkit API to ensure EDBE fires.
                     runSync {
                         val base = WeaponDamages.getDamage(weapon.type).takeIf { it > 0 } ?: 1.0
@@ -380,7 +475,7 @@ class OldCriticalHitsIntegrationTest :
             } finally {
                 HandlerList.unregisterAll(listener)
                 runSync {
-                    victim.remove()
+                    if (targetSpawned) victim.remove()
                 }
             }
         }
@@ -434,6 +529,112 @@ class OldCriticalHitsIntegrationTest :
         afterSpec {
             runSync {
                 fakeAttacker.removePlayer()
+            }
+        }
+
+        test("native critical hits respect server multipliers and configured tool damage") {
+            val originalConfig = ocm.config.saveToString()
+            val purpurMethod = Reflector.getMethod(Bukkit.spigot().javaClass, "getPurpurConfig", 0)
+
+            fun purpurConfig(): YamlConfiguration? = purpurMethod?.invoke(Bukkit.spigot()) as? YamlConfiguration
+            val originalPurpur = purpurConfig()?.saveToString()
+            val purpurFile = File("purpur.yml")
+            val originalPurpurFile = if (purpurFile.exists()) purpurFile.readText() else null
+            val multiplierPath = "gameplay-mechanics.player.critical-damage-multiplier"
+
+            fun setServerMultiplier(worldOverride: Double?) {
+                val config = purpurConfig() ?: return
+                config.set("world-settings.default.$multiplierPath", 2.0)
+                config.set("world-settings.${attacker.world.name}.$multiplierPath", worldOverride)
+                config.save(purpurFile)
+                check(Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "purpur reload"))
+                check(purpurConfig() !== config) { "Purpur reload must replace its configuration object" }
+                purpurConfig()!!.getDouble("world-settings.default.$multiplierPath") shouldBe 2.0
+            }
+
+            fun configureCriticalModule(enabled: Boolean) {
+                val modules = mutableListOf("old-tool-damage", "disable-attack-cooldown")
+                if (enabled) modules.add("old-critical-hits")
+                ocm.config.set("always_enabled_modules", modules)
+                ocm.config.set(
+                    "disabled_modules",
+                    ModuleLoader.getConfigurableModuleNames().filterNot { it in modules },
+                )
+                ocm.config.set("modesets", null)
+                ocm.config.createSection("modesets", mapOf("old" to emptyList<String>()))
+                ocm.config.set("old-critical-hits.multiplier", 1.25)
+                ocm.config.set("old-tool-damage.damages.IRON_AXE", 4.5)
+                ocm.saveConfig()
+                Config.reload()
+            }
+
+            try {
+                for (worldOverride in listOf(null, 2.123456789, null)) {
+                    runSync { setServerMultiplier(worldOverride) }
+                    val serverMultiplier =
+                        if (purpurMethod ==
+                            null
+                        ) {
+                            1.5
+                        } else {
+                            (worldOverride ?: 2.0).toFloat().toDouble()
+                        }
+                    ServerCriticalMultiplier.get(attacker.world) shouldBe serverMultiplier
+                    for (enabled in listOf(true, false)) {
+                        runSync { configureCriticalModule(enabled) }
+                        criticalModule.isEnabled(attacker) shouldBe enabled
+                        val weapon = XMaterial.IRON_AXE.parseItem() ?: error("IRON_AXE unavailable")
+                        val normal = hitAndCaptureDamage(weapon, false, false, serverMultiplier)
+                        val critical = hitAndCaptureDamage(weapon, true, false, serverMultiplier)
+                        withClue("worldOverride=$worldOverride OCM critical module=$enabled server=$serverMultiplier") {
+                            normal shouldBe (4.5 plusOrMinus 0.001)
+                            critical shouldBe ((4.5 * if (enabled) 1.25 else serverMultiplier) plusOrMinus 0.001)
+                        }
+                    }
+                }
+                if (purpurMethod != null) {
+                    // Constructed OCM events cover values for which native damage may emit no event.
+                    runSync {
+                        for (invalid in listOf(
+                            0.0,
+                            -1.0,
+                            Double.NaN,
+                            Double.POSITIVE_INFINITY,
+                            Double.MIN_VALUE,
+                            Double.MAX_VALUE,
+                        )) {
+                            purpurConfig()!!.set("world-settings.${attacker.world.name}.$multiplierPath", invalid)
+                            attacker.isSprinting = false
+                            attacker.fallDistance = 2f
+                            setOnGround(attacker, false)
+                            DamageUtils.isCriticalHit1_9(attacker) shouldBe true
+                            val event =
+                                OCMEntityDamageByEntityEvent(
+                                    attacker,
+                                    attacker,
+                                    EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+                                    9.0,
+                                )
+                            withClue("Unreversible server multiplier $invalid") {
+                                event.isCancelled shouldBe true
+                                event.rawDamage shouldBe 9.0
+                            }
+                        }
+                    }
+                }
+            } finally {
+                runSync {
+                    if (originalPurpur != null) {
+                        val config = purpurConfig()!!
+                        config.loadFromString(originalPurpur)
+                        config.save(purpurFile)
+                        check(Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "purpur reload"))
+                        if (originalPurpurFile != null) purpurFile.writeText(originalPurpurFile)
+                    }
+                    ocm.config.loadFromString(originalConfig)
+                    ocm.saveConfig()
+                    Config.reload()
+                }
             }
         }
 
@@ -611,8 +812,23 @@ class OldCriticalHitsIntegrationTest :
                 val ironAxe =
                     XMaterial.IRON_AXE.parseItem()
                         ?: error("IRON_AXE material not available")
-                val normalDamage = hitAndCaptureDamage(ironAxe, critical = false)
-                val criticalDamage = hitAndCaptureDamage(ironAxe, critical = true)
+                // Check native incoming damage as well as the configured final damage. This path invokes
+                // one native attack and requires its event, so API damage fallback cannot satisfy the test.
+                val nativeMultiplier = ServerCriticalMultiplier.get(attacker.world)
+                val normalDamage =
+                    hitAndCaptureDamage(
+                        ironAxe,
+                        critical = false,
+                        sprinting = false,
+                        nativeMultiplier = nativeMultiplier,
+                    )
+                val criticalDamage =
+                    hitAndCaptureDamage(
+                        ironAxe,
+                        critical = true,
+                        sprinting = false,
+                        nativeMultiplier = nativeMultiplier,
+                    )
                 testPlugin.logger.info("Crit debug (cfg=4.5): normal=$normalDamage critical=$criticalDamage")
                 withClue("normal=$normalDamage critical=$criticalDamage") {
                     normalDamage shouldBe (4.5 plusOrMinus 0.05)

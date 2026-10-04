@@ -77,6 +77,8 @@ modesets:
     - "old-burn-delay"
     - "disable-attack-sounds"
     - "update-checker"
+    - "old-potion-throwing"
+    - "old-critical-hits"
   new: []
 
 worlds:
@@ -122,8 +124,6 @@ disable-attack-cooldown:
   # Newer-version material keys that are unavailable on the current server are
   # ignored safely.
   held-item-attack-speeds:
-    # TRIDENT: 1.1
-    MACE: 0.6
     WOODEN_SPEAR: 1.54
     GOLDEN_SPEAR: 1.05
     STONE_SPEAR: 1.33
@@ -131,6 +131,8 @@ disable-attack-cooldown:
     IRON_SPEAR: 1.05
     DIAMOND_SPEAR: 0.95
     NETHERITE_SPEAR: 0.87
+    # TRIDENT: 1.1
+    # MACE: 0.6
   # Minimum attack charge required for spears.
   # Set to 1.0 to keep the vanilla behavior.
   minimum-attack-charge: 1.0
@@ -168,8 +170,8 @@ old-tool-damage:
     # This is a cosmetic helper to reduce confusion, but can interact with other plugins that rewrite item lore.
     enabled: false
     prefix: "OCM Damage:"
-  # Damage values shown in 1.9 representation (actual damage)
-  # In 1.8 the damage tooltip value would be added to 1 'base damage', yielding the values below
+  # Damage values are in 1.9+ "actual damage" terms (1 damage = half a heart).
+  # In 1.8, the client tooltip showed "+X Attack Damage", where X = (actual_damage - 1) because the base unarmed damage is 1.
   damages:
     # Axe damages
     GOLD_AXE: 4
@@ -260,7 +262,7 @@ shield-damage-reduction:
   generalDamageReductionAmount: 1
   generalDamageReductionPercentage: 50
   # This value works the same but is exclusively for projectile damage
-  # Set amount to 0 and percentage to 100 for 1.8 behaviour, i.e. arrows go through shields
+  # Set amount and percentage to 0 to leave projectile damage unchanged by blocking
   projectileDamageReductionAmount: 1
   projectileDamageReductionPercentage: 50
   # If enabled, damage reduction will not apply to vanilla shields.
@@ -287,7 +289,7 @@ sword-blocking:
 
 disable-sword-sweep:
   # This is to disable the sword sweep attack
-  # With ProtocolLib, particle effect is also removed
+  # With PacketEvents, particle effect is also removed
 
 disable-new-attack-particles:
   # This is to disable the sword sweep attack particles
@@ -470,11 +472,17 @@ old-fishing-knockback:
 fishing-rod-velocity:
   # In 1.9+ fishing rods go 8 blocks instead of 12 blocks
   # This is due to both gravity and initial launch speed
-  # Set to true to revert back to the old calculations and gravity
+  # Enabled through the module lists above; always uses the 1.8 launch calculation.
+  # Downward acceleration in blocks per tick squared, from 0 to 1.
+  # Vanilla 1.8 and 1.9: 0.04. Vanilla 1.12 and modern servers (including 1.14+): 0.03.
+  # Custom gravity takes effect from the next server tick. Water behaviour stays native.
+  gravity: 0.04
 
 projectile-knockback:
   # This adds knockback and/or damage to players when they get hit by snowballs, eggs & enderpearls
   # This has been a Bukkit bug for so long people thought it was vanilla when it was patched
+  # Knockback is triggered by the small damage values below. Full damage resistance
+  # (such as Resistance V or higher) can prevent this knockback.
   # This is the damage done by each projectile
   damage:
     snowball: 0.0001
@@ -546,6 +554,27 @@ old-golden-apples:
   # Enable this if you have another plugin which adds a crafting recipe for
   # enchanted golden apples (requires server restart)
   no-conflict-mode: false
+
+old-potion-throwing:
+  # Independent of old-potion-effects. Only changes player-thrown splash potions.
+  # Lingering potions, witches and dispensers keep their native launch behaviour.
+  # Position offsets precede movement on Paper; servers without a safe insertion hook use the next tick.
+  # Launch speed, in blocks per tick (0 to 10). Vanilla 1.8: 0.5; vanilla 1.9: 0.5.
+  launch-speed: 0.5
+  # Angles in degrees (-180 to 180). Pitch changes the vertical component only.
+  # Vanilla 1.8 and 1.9: pitch -20, yaw 0. Native Gaussian launch spread is retained.
+  pitch-offset: -20.0
+  yaw-offset: 0.0
+  # Blocks right of the shooter's eyes (-4 to 4). Vanilla 1.8: 0.16; vanilla 1.9: 0.
+  sideways-offset: 0.16
+  # Blocks above the eyes (-4 to 4, negative means below). Vanilla 1.8 and 1.9: -0.1.
+  vertical-offset: -0.1
+  # Vanilla 1.8: false; vanilla 1.9: true.
+  # When true, add horizontal player velocity, and vertical velocity only while airborne.
+  inherit-player-velocity: false
+  # Downward acceleration in blocks per tick squared (0 to 1). Vanilla 1.8 and 1.9: 0.05.
+  # Custom gravity takes effect from the next server tick; native drag and tick order are retained.
+  gravity: 0.05
 
 old-potion-effects:
   # This is to restore the 1.8 potion effects and duration
@@ -731,8 +760,8 @@ disable-attack-sounds:
   blocked-sound-names:
     - "ENTITY_PLAYER_ATTACK_STRONG"
     - "ENTITY_PLAYER_ATTACK_SWEEP"
-    - "ENTITY_PLAYER_ATTACK_KNOCKBACK"
     - "ENTITY_PLAYER_ATTACK_NODAMAGE"
+    - "ENTITY_PLAYER_ATTACK_KNOCKBACK"
     - "ENTITY_PLAYER_ATTACK_CRIT"
     - "ENTITY_PLAYER_ATTACK_WEAK"
 
@@ -764,4 +793,4 @@ debug:
   enabled: false
 
 # DO NOT CHANGE THIS NUMBER AS IT WILL RESET YOUR CONFIG
-config-version: 74
+config-version: 76

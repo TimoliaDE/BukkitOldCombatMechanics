@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.IdentityHashMap;
 
 public class EntityDamageByEntityListener extends OCMModule {
 
@@ -30,6 +31,9 @@ public class EntityDamageByEntityListener extends OCMModule {
     private final Map<UUID, Double> lastDamages;
     private final Map<UUID, Long> lastDamageExpiryTicks;
     private long tickCounter;
+    private final Map<EntityDamageEvent, PendingDamage> pendingDamages = new IdentityHashMap<>();
+    private final Map<UUID, Long> acceptedDamageSequences = new HashMap<>();
+    private long damageSequence;
     private int expirySweepTaskId = -1;
     private static final long EXPIRY_SWEEP_INTERVAL_TICKS = 20L;
     private static final long MIN_LAST_DAMAGE_TTL_TICKS = 20L;
@@ -61,6 +65,8 @@ public class EntityDamageByEntityListener extends OCMModule {
             stopExpirySweeperIfNeeded();
             lastDamages.clear();
             lastDamageExpiryTicks.clear();
+            pendingDamages.clear();
+            acceptedDamageSequences.clear();
         }
     }
 
@@ -99,6 +105,7 @@ public class EntityDamageByEntityListener extends OCMModule {
             final UUID uuid = entry.getKey();
             it.remove();
             lastDamages.remove(uuid);
+            acceptedDamageSequences.remove(uuid);
         }
     }
 
@@ -138,6 +145,7 @@ public class EntityDamageByEntityListener extends OCMModule {
             debug("Attack damage (before defence): " + newDamage);
 
         } else {
+            AttackCooldownTracker.prepareAttack((EntityDamageByEntityEvent) event);
             final Entity damager = ((EntityDamageByEntityEvent) event).getDamager();
 
             // Call event constructor before setting lastDamage back, because we need it for calculations
@@ -155,75 +163,87 @@ public class EntityDamageByEntityListener extends OCMModule {
             // Call event for the other modules to make their modifications
             plugin.getServer().getPluginManager().callEvent(e);
 
-            if (e.isCancelled()) return;
+            if (e.isCancelled()) {
+                // Projectiles bypass offensive reconstruction but still meet a raised Paper sword.
+                // Preserve explicit cancellation of ordinary living-attacker OCM events.
+//                if (!(damager instanceof LivingEntity)) {
+//                    final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
+//                    if (swordBlocking != null) {
+//                        final double reduction = swordBlocking.applyPaperBlockingReduction(
+//                                (EntityDamageByEntityEvent) event, event.getDamage());
+//                        if (reduction != 0) BlockingDamageRecalculation.replaceBlocking(event, -reduction);
+//                    }
+//                }
+                return;
+            }
 
             // Now we re-calculate damage modified by the modules and set it back to original event
             // Attack components order: (Base + Potion effects, scaled by attack delay) + Critical Hit + (Enchantments, scaled by attack delay)
             // Hurt components order: Overdamage - Armour - Resistance - Armour enchants - Absorption
             double newDamage = e.getBaseDamage();
 
-            debug("Base: " + e.getBaseDamage(), damager);
-            debug("Base: " + e.getBaseDamage());
+            if (!e.isNativeSweepAttack()) {
+                debug("Base: " + e.getBaseDamage(), damager);
+                debug("Base: " + e.getBaseDamage());
 
-            // Weakness potion
-            final double weaknessModifier = e.getWeaknessModifier() * e.getWeaknessLevel();
-            final double weaknessAddend = e.isWeaknessModifierMultiplier() ? newDamage * weaknessModifier : weaknessModifier;
-            // Don't modify newDamage yet so both potion effects are calculated off of the base damage
-            debug("Weak: " + weaknessAddend);
-            debug("Weak: " + weaknessAddend, damager);
+                // Weakness potion
+                final double weaknessModifier = e.getWeaknessModifier() * e.getWeaknessLevel();
+                final double weaknessAddend = e.isWeaknessModifierMultiplier() ? newDamage * weaknessModifier : weaknessModifier;
+                // Don't modify newDamage yet so both potion effects are calculated off of the base damage
+                debug("Weak: " + weaknessAddend);
+                debug("Weak: " + weaknessAddend, damager);
 
-            // Strength potion
-            debug("Strength level: " + e.getStrengthLevel());
-            debug("Strength level: " + e.getStrengthLevel(), damager);
-            double strengthModifier = e.getStrengthModifier() * e.getStrengthLevel();
-            if (!e.isStrengthModifierMultiplier()) newDamage += strengthModifier;
-            else if (e.isStrengthModifierAddend()) newDamage *= ++strengthModifier;
-            else newDamage *= strengthModifier;
+                // Strength potion
+                debug("Strength level: " + e.getStrengthLevel());
+                debug("Strength level: " + e.getStrengthLevel(), damager);
+                double strengthModifier = e.getStrengthModifier() * e.getStrengthLevel();
+                if (!e.isStrengthModifierMultiplier()) newDamage += strengthModifier;
+                else if (e.isStrengthModifierAddend()) newDamage *= ++strengthModifier;
+                else newDamage *= strengthModifier;
 
-            debug("Strength: " + strengthModifier);
-            debug("Strength: " + strengthModifier, damager);
+                debug("Strength: " + strengthModifier);
+                debug("Strength: " + strengthModifier, damager);
 
-            newDamage += weaknessAddend;
+                newDamage += weaknessAddend;
 
-            // Scale by attack delay
-            // float currentItemAttackStrengthDelay = 1.0D / GenericAttributes.ATTACK_SPEED * 20.0D
-            // attack strength ticker goes up by 1 every tick, is reset to 0 after an attack
-            // float f2 = MathHelper.clamp((attackStrengthTicker + 0.5) / currentItemAttackStrengthDelay, 0.0F, 1.0F);
-            // f *= 0.2F + f2 * f2 * 0.8F;
-            // the multiplier is equivalent to y = 0.8x^2 + 0.2
-            // because x (f2) is always between 0 and 1, the multiplier will always be between 0.2 and 1
-            // this implies 40 speed is the minimum to always have full attack strength
-            if (damager instanceof HumanEntity) {
-                final float cooldown = DamageUtils.getAttackCooldown.apply((HumanEntity) damager, 0.5F); // i.e. f2
-                debug("Scale by attack delay: " + newDamage + " *= 0.2 + " + cooldown + "^2 * 0.8");
-                newDamage *= 0.2F + cooldown * cooldown * 0.8F;
+                // Scale by attack delay
+                // float currentItemAttackStrengthDelay = 1.0D / GenericAttributes.ATTACK_SPEED * 20.0D
+                // attack strength ticker goes up by 1 every tick, is reset to 0 after an attack
+                // float f2 = MathHelper.clamp((attackStrengthTicker + 0.5) / currentItemAttackStrengthDelay, 0.0F, 1.0F);
+                // f *= 0.2F + f2 * f2 * 0.8F;
+                // the multiplier is equivalent to y = 0.8x^2 + 0.2
+                // because x (f2) is always between 0 and 1, the multiplier will always be between 0.2 and 1
+                // this implies 40 speed is the minimum to always have full attack strength
+                if (damager instanceof HumanEntity) {
+                    final float cooldown = DamageUtils.getAttackCooldown.apply((HumanEntity) damager, 0.5F); // i.e. f2
+                    debug("Scale by attack delay: " + newDamage + " *= 0.2 + " + cooldown + "^2 * 0.8");
+                    newDamage *= 0.2F + cooldown * cooldown * 0.8F;
+                }
+
+                // Critical hit
+                final double criticalMultiplier = e.getCriticalMultiplier();
+                debug("Crit " + newDamage + " *= " + criticalMultiplier);
+                newDamage *= criticalMultiplier;
+
+                // Enchantment damage, scaled by attack cooldown
+                double enchantmentDamage = e.getMobEnchantmentsDamage() + e.getSharpnessDamage();
+                if (damager instanceof HumanEntity) {
+                    final float cooldown = DamageUtils.getAttackCooldown.apply((HumanEntity) damager, 0.5F);
+                    debug("Scale enchantments by attack delay: " + enchantmentDamage + " *= " + cooldown);
+                    enchantmentDamage *= cooldown;
+                }
+                newDamage += enchantmentDamage;
+                debug("Mob " + e.getMobEnchantmentsDamage() + " Sharp: " + e.getSharpnessDamage() + " Scaled: " + enchantmentDamage, damager);
             }
-
-            // Critical hit
-            final double criticalMultiplier = e.getCriticalMultiplier();
-            debug("Crit " + newDamage + " *= " + criticalMultiplier);
-            newDamage *= criticalMultiplier;
-
-            // Enchantment damage, scaled by attack cooldown
-            double enchantmentDamage = e.getMobEnchantmentsDamage() + e.getSharpnessDamage();
-            if (damager instanceof HumanEntity) {
-                final float cooldown = DamageUtils.getAttackCooldown.apply((HumanEntity) damager, 0.5F);
-                debug("Scale enchantments by attack delay: " + enchantmentDamage + " *= " + cooldown);
-                enchantmentDamage *= cooldown;
-            }
-            newDamage += enchantmentDamage;
-            debug("Mob " + e.getMobEnchantmentsDamage() + " Sharp: " + e.getSharpnessDamage() + " Scaled: " + enchantmentDamage, damager);
 
             // Paper sword blocking (consumable-based, no shield)
             final ModuleSwordBlocking swordBlocking = ModuleSwordBlocking.getInstance();
             double paperBlockReduction = 0;
             if (event instanceof EntityDamageByEntityEvent && swordBlocking != null) {
                 paperBlockReduction = swordBlocking.applyPaperBlockingReduction((EntityDamageByEntityEvent) event, newDamage);
-                if (paperBlockReduction > 0) {
+                if (paperBlockReduction != 0) {
                     final double preBlockDamage = newDamage;
                     newDamage = Math.max(0, newDamage - paperBlockReduction);
-                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BLOCKING, -paperBlockReduction);
-                    ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, preBlockDamage);
                     debug("Sword block (Paper): " + preBlockDamage + " - " + paperBlockReduction + " = " + newDamage, damager);
                 }
             }
@@ -241,9 +261,12 @@ public class EntityDamageByEntityListener extends OCMModule {
                 newDamage = 0;
             }
 
+            // Recalculate the native defences once, after immunity. Calling setDamage again
+            // after replacing BLOCKING would reset the downstream native modifier functions.
             // Set damage; if we already populated modifiers for blocking, avoid overwriting BASE.
-            if (paperBlockReduction > 0 && event instanceof EntityDamageByEntityEvent) {
-                ((EntityDamageByEntityEvent) event).setDamage(EntityDamageEvent.DamageModifier.BASE, newDamage + paperBlockReduction);
+            if (paperBlockReduction > 0 && event instanceof EntityDamageByEntityEvent entityDamageByEntityEvent) {
+                entityDamageByEntityEvent.setDamage(EntityDamageEvent.DamageModifier.BASE,
+                        newDamage + paperBlockReduction);
                 // BLOCKING was set earlier; total damage is BASE + BLOCKING (+ others)
             } else {
                 event.setDamage(newDamage);
@@ -262,6 +285,16 @@ public class EntityDamageByEntityListener extends OCMModule {
     @EventHandler(priority = EventPriority.MONITOR)
     public void afterEntityDamage(EntityDamageEvent event) {
         final Entity damagee = event.getEntity();
+        final PendingDamage pending = pendingDamages.remove(event);
+        if (pending != null && !event.isCancelled() && damagee instanceof LivingEntity) {
+            final UUID uuid = damagee.getUniqueId();
+            // A nested accepted event must not be overwritten when an older outer event finishes.
+            if (pending.sequence > acceptedDamageSequences.getOrDefault(uuid, -1L)) {
+                lastDamages.put(uuid, pending.damage);
+                acceptedDamageSequences.put(uuid, pending.sequence);
+                touchExpiry((LivingEntity) damagee);
+            }
+        }
 
         if (event instanceof EntityDamageByEntityEvent) {
             if (damagee instanceof LivingEntity && lastDamages.containsKey(damagee.getUniqueId())) {
@@ -273,6 +306,8 @@ public class EntityDamageByEntityListener extends OCMModule {
                 }, 1L);
             }
         } else {
+            // A rejected environmental hit must not discard a successful hit's baseline.
+            if (event.isCancelled()) return;
             // if not EDBYE then we leave last damage as is
             if (damagee instanceof LivingEntity) {
                 final LivingEntity livingDamagee = (LivingEntity) damagee;
@@ -358,10 +393,9 @@ public class EntityDamageByEntityListener extends OCMModule {
                     + " ticks: " + livingDamagee.getNoDamageTicks() + " /" + livingDamagee.getMaximumNoDamageTicks()
             );
         }
-        // Update the last damage done, including when it was overdamage.
-        // This means attacks must keep increasing in value during immunity period to keep dealing overdamage.
-        lastDamages.put(livingDamagee.getUniqueId(), newLastDamage);
-        touchExpiry(livingDamagee);
+        // Other plugins can still reject this hit. Commit its baseline only at MONITOR,
+        // so cancelled hits cannot suppress later or nested accepted damage.
+        pendingDamages.put(event, new PendingDamage(newLastDamage, ++damageSequence));
 
         return newDamage;
     }
@@ -372,6 +406,7 @@ public class EntityDamageByEntityListener extends OCMModule {
         if (expiresAtTick != null && expiresAtTick <= tickCounter) {
             lastDamageExpiryTicks.remove(uuid);
             lastDamages.remove(uuid);
+            acceptedDamageSequences.remove(uuid);
             return null;
         }
         return lastDamages.get(uuid);
@@ -381,6 +416,17 @@ public class EntityDamageByEntityListener extends OCMModule {
         final UUID uuid = damagee.getUniqueId();
         lastDamageExpiryTicks.remove(uuid);
         lastDamages.remove(uuid);
+        acceptedDamageSequences.remove(uuid);
+    }
+
+    private static final class PendingDamage {
+        private final double damage;
+        private final long sequence;
+
+        private PendingDamage(double damage, long sequence) {
+            this.damage = damage;
+            this.sequence = sequence;
+        }
     }
 
     private boolean damageSourceBypassesCooldown(EntityDamageEvent event) {
