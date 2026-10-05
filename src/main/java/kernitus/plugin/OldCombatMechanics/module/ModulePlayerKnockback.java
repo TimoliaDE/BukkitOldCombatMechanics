@@ -507,4 +507,6 @@ public class ModulePlayerKnockback extends OCMModule {
         Map<UUID, Player> rodEntities = ModuleFishingKnockback.getRodEntities();
         return rodEntities.remove(victimId);
     }
+
+
 }

@@ -6,6 +6,7 @@
 package kernitus.plugin.OldCombatMechanics.module;
 
 import kernitus.plugin.OldCombatMechanics.OCMMain;
+import kernitus.plugin.OldCombatMechanics.utilities.damage.CombatDamageProvenance;
 import org.bukkit.entity.EntityType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -23,7 +24,7 @@ public class ModuleProjectileKnockback extends OCMModule {
         super(plugin, "projectile-knockback");
     }
 
-    @EventHandler(priority = EventPriority.NORMAL)
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onEntityHit(EntityDamageByEntityEvent e) {
         if (!isEnabled(e.getDamager(), e.getEntity())) return;
 
@@ -32,7 +33,9 @@ public class ModuleProjectileKnockback extends OCMModule {
         switch (type) {
             case SNOWBALL: case EGG: case ENDER_PEARL:
                 if (e.getDamage() == 0.0) { // So we don't override enderpearl fall damage
-                    e.setDamage(module().getDouble("damage." + type.toString().toLowerCase(Locale.ROOT)));
+                    final double damage = module().getDouble("damage." + type.toString().toLowerCase(Locale.ROOT));
+                    e.setDamage(damage);
+                    if (damage == 0.0001) CombatDamageProvenance.markChip(e);
                     if (e.isApplicable(EntityDamageEvent.DamageModifier.ABSORPTION))
                         e.setDamage(EntityDamageEvent.DamageModifier.ABSORPTION, 0);
                 }
