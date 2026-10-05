@@ -2,8 +2,10 @@ package kernitus.plugin.OldCombatMechanics.utilities;
 
 import io.papermc.paper.configuration.GlobalConfiguration;
 import kernitus.plugin.OldCombatMechanics.module.ModuleAttackRange;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -55,9 +57,11 @@ public class AttackRangeUtil {
         }
 
         AABB boundingBox = nmsTarget.getBoundingBox();
+        ItemStack mainHandItem = nmsPlayer.getMainHandItem();
 
         if (nmsPlayer.isWithinAttackRange(boundingBox,
-                GlobalConfiguration.get().misc.clientInteractionLeniencyDistance.or(3.0))) {
+                GlobalConfiguration.get().misc.clientInteractionLeniencyDistance.or(3.0)) &&
+                !mainHandItem.has(DataComponents.PIERCING_WEAPON)) {
             if (target instanceof Item || target instanceof org.bukkit.entity.ExperienceOrb) return;
             if (nmsTarget instanceof AbstractArrow arrow && !arrow.isAttackable()) return;
 
